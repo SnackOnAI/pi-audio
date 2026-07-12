@@ -1,0 +1,56 @@
+application:
+  name: "pi-audio-stack"
+  version: "0.1.0"
+
+audio:
+  device: "plughw:CARD=Mic,DEV=0"
+  sample_rate: 16000
+  channels: 1
+  sample_width_bytes: 2
+  chunk_duration_ms: 30
+  queue_size: 250
+
+stream:
+  enabled: true
+  encoder: "ffmpeg"
+  bitrate_kbps: 64
+  icecast_url: "icecast://source:${ICECAST_SOURCE_PASSWORD}@127.0.0.1:8000/live.mp3"
+  restart_delay_seconds: 5
+
+vad:
+  enabled: true
+  threshold: 0.50
+  minimum_speech_ms: 250
+  silence_timeout_ms: 1000
+  pre_buffer_ms: 1500
+  post_buffer_ms: 750
+
+recording:
+  directory: "./recordings"
+  format: "mp3"
+  bitrate_kbps: 64
+  minimum_duration_ms: 500
+  maximum_duration_seconds: 3600
+  metadata_enabled: true
+
+upload:
+  enabled: true
+  remote: "dropbox-audio"
+  destination: "Pi Audio"
+  retry_initial_seconds: 30
+  retry_max_seconds: 3600
+  delete_after_success: true
+
+logging:
+  level: "INFO"
+  directory: "./logs"
+  filename: "audio-stack.log"
+  max_bytes: 10485760
+  backup_count: 5
+  console: true
+  json: true
+
+health:
+  enabled: true
+  interval_seconds: 30
+  file: "./logs/health.json"

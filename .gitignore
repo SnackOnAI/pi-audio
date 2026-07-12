@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime data
+recordings/*
+!recordings/.gitkeep
+
+logs/*
+!logs/.gitkeep
+
+# Secrets and local overrides
+.env
+config.local.yaml
+
+# Editors and operating systems
+.DS_Store
+.vscode/
+.idea/

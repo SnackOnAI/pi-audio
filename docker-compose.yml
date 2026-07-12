@@ -1,0 +1,31 @@
+services:
+
+  icecast:
+    image: moul/icecast
+    container_name: icecast
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config/icecast.xml:/etc/icecast.xml
+
+  streamer:
+    image: linuxserver/ffmpeg
+    container_name: audio-stream
+    restart: unless-stopped
+    network_mode: host
+    devices:
+      - /dev/snd:/dev/snd
+    volumes:
+      - ./config:/config
+    command: /bin/bash /config/ffmpeg-stream.sh
+
+  uploader:
+    image: rclone/rclone
+    container_name: dropbox-upload
+    restart: unless-stopped
+    volumes:
+      - ./recordings:/recordings
+      - ~/.config/rclone:/config/rclone
+      - ./config:/scripts
+    command: /bin/sh /scripts/uploader.sh

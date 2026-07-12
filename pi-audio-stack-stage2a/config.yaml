@@ -1,0 +1,26 @@
+application:
+  name: "pi-audio-stack"
+  version: "0.1.0"
+
+audio:
+  device: "plughw:CARD=Mic,DEV=0"
+  sample_rate: 16000
+  channels: 1
+  sample_width_bytes: 2
+  chunk_duration_ms: 30
+  queue_size: 250
+
+stream:
+  enabled: true
+  encoder: "ffmpeg"
+  bitrate_kbps: 64
+  icecast_url: "icecast://source:${ICECAST_SOURCE_PASSWORD}@127.0.0.1:8000/live.mp3"
+  restart_delay_seconds: 5
+
+vad:
+  enabled: true
+  threshold: 0.5
+  minimum_speech_ms: 250
+  silence_timeout_ms: 1000
+  pre_buffer_ms: 1500
+  post_buffer_ms: 750
