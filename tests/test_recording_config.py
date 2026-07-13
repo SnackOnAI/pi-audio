@@ -73,6 +73,25 @@ class RecordingConfigurationTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             AppConfig.from_dict(data)
 
+    def test_rejects_invalid_upload_configuration(self) -> None:
+        invalid_values = (
+            ("remote", ""),
+            ("remote", "dropbox-audio:"),
+            ("destination", "/"),
+            ("scan_interval_seconds", 0),
+            ("settle_seconds", -1),
+            ("operation_timeout_seconds", 0),
+            ("retry_initial_seconds", 0),
+            ("retry_max_seconds", 29),
+        )
+
+        for key, value in invalid_values:
+            data = deepcopy(self.config_data)
+            data["upload"][key] = value
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(ConfigurationError):
+                    AppConfig.from_dict(data)
+
 
 if __name__ == "__main__":
     unittest.main()

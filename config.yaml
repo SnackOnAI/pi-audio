@@ -25,7 +25,7 @@ vad:
 
 activity:
   enabled: true
-  threshold_dbfs: -25.0
+  threshold_dbfs: -15.0
   minimum_active_ms: 90
   silence_timeout_ms: 1000
   pre_buffer_ms: 1500
@@ -43,6 +43,9 @@ upload:
   enabled: true
   remote: "dropbox-audio"
   destination: "Pi Audio"
+  scan_interval_seconds: 10
+  settle_seconds: 2
+  operation_timeout_seconds: 300
   retry_initial_seconds: 30
   retry_max_seconds: 3600
   delete_after_success: true
