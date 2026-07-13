@@ -84,6 +84,7 @@ class RecordingConfigurationTests(unittest.TestCase):
             ("retry_initial_seconds", 0),
             ("retry_max_seconds", 29),
             ("local_retention_hours", -1),
+            ("date_subdirectories", "yes"),
         )
 
         for key, value in invalid_values:

@@ -51,6 +51,7 @@ upload:
   delete_after_success: true
   local_retention_hours: 48
   wait_for_transcription: true
+  date_subdirectories: true
 
 transcription:
   enabled: true

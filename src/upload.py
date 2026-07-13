@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import suppress
 from dataclasses import asdict, dataclass
@@ -256,7 +257,17 @@ class RcloneUploadService:
 
     def _remote_target(self, path: Path) -> str:
         destination = self._upload_config.destination.strip("/")
+        if self._upload_config.date_subdirectories:
+            destination = f"{destination}/{self._date_subdirectory(path)}"
         return f"{self._upload_config.remote}:{destination}/{path.name}"
+
+    @staticmethod
+    def _date_subdirectory(path: Path) -> str:
+        match = re.match(r"sound-(\d{4})(\d{2})(\d{2})T", path.name)
+        if match is not None:
+            return "/".join(match.groups())
+        modified_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+        return modified_at.strftime("%Y/%m/%d")
 
     def _retention_elapsed(self, bundle: RecordingBundle) -> bool:
         retention_seconds = self._upload_config.local_retention_hours * 3_600

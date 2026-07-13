@@ -121,6 +121,7 @@ class UploadConfig:
     delete_after_success: bool
     local_retention_hours: int
     wait_for_transcription: bool = False
+    date_subdirectories: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +250,7 @@ class AppConfig:
                 delete_after_success=_require(upload, "delete_after_success", bool),
                 local_retention_hours=_require(upload, "local_retention_hours", int),
                 wait_for_transcription=_require(upload, "wait_for_transcription", bool),
+                date_subdirectories=_require(upload, "date_subdirectories", bool),
             ),
             transcription=TranscriptionConfig(
                 enabled=_require(transcription, "enabled", bool),

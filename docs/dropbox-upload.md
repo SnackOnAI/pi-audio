@@ -32,9 +32,12 @@ rclone listremotes
 rclone lsd dropbox-audio:
 ```
 
-The supplied configuration uploads to `dropbox-audio:Pi Audio` and retains a
-48-hour local copy. The scan, settling, operation timeout, retention, and retry
-values are independently configurable.
+The supplied configuration uploads new bundles into UTC date folders such as
+`dropbox-audio:Pi Audio/2026/07/13` and retains a 48-hour local copy. Audio,
+recording metadata, transcript text, and transcript metadata from the same bundle
+share the same folder. Existing files are not moved. Set `date_subdirectories` to
+`false` to restore flat uploads. The scan, settling, operation timeout, retention,
+and retry values are independently configurable.
 Structured logs use `upload_completed`, `upload_failed`, and
 `upload_local_deleted` events.
 

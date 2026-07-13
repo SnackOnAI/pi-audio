@@ -44,6 +44,7 @@ def upload_config(
     settle_seconds: int = 0,
     local_retention_hours: int = 0,
     wait_for_transcription: bool = False,
+    date_subdirectories: bool = False,
 ) -> UploadConfig:
     return UploadConfig(
         enabled=True,
@@ -57,10 +58,39 @@ def upload_config(
         delete_after_success=delete_after_success,
         local_retention_hours=local_retention_hours,
         wait_for_transcription=wait_for_transcription,
+        date_subdirectories=date_subdirectories,
     )
 
 
 class RcloneUploadServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_uploads_recording_bundle_to_utc_date_subdirectory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path = root / "sound-20260713T194557.647588Z-3c87e87c.mp3"
+            metadata_path = audio_path.with_suffix(".json")
+            audio_path.write_bytes(b"mp3")
+            metadata_path.write_text("{}", encoding="utf-8")
+            service = RcloneUploadService(
+                recording_config(root),
+                upload_config(
+                    delete_after_success=False,
+                    date_subdirectories=True,
+                ),
+            )
+            create_process = AsyncMock(side_effect=(FakeProcess(), FakeProcess()))
+
+            with patch("asyncio.create_subprocess_exec", create_process):
+                await service._process_bundle(service._bundle(root, audio_path.stem))
+
+            targets = [call.args[3] for call in create_process.await_args_list]
+            self.assertEqual(
+                targets,
+                [
+                    f"dropbox-audio:Pi Audio/2026/07/13/{audio_path.name}",
+                    f"dropbox-audio:Pi Audio/2026/07/13/{metadata_path.name}",
+                ],
+            )
+
     async def test_uploads_bundle_then_deletes_local_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
