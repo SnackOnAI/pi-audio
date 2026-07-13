@@ -13,7 +13,11 @@ from .audio import (
     AlsaAudioSource,
     AudioCaptureService,
     AudioFrameBroker,
+    FfmpegAudioRecorder,
     FfmpegStreamingService,
+    RmsAudioActivityDetector,
+    SoundRecordingService,
+    WebRtcVoiceActivityDetector,
 )
 from .config import load_config
 from .log_setup import configure_logging
@@ -97,6 +101,25 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if config.stream.enabled
         else None
     )
+    detection_service = (
+        SoundRecordingService(
+            broker,
+            RmsAudioActivityDetector(config.activity.threshold_dbfs),
+            FfmpegAudioRecorder(config.audio, config.recording, logger=logger),
+            config.audio,
+            config.activity,
+            config.recording,
+            voice_detector=(
+                WebRtcVoiceActivityDetector(config.audio, config.vad.aggressiveness)
+                if config.vad.enabled
+                else None
+            ),
+            vad_config=config.vad if config.vad.enabled else None,
+            logger=logger,
+        )
+        if config.activity.enabled
+        else None
+    )
     shutdown_requested = asyncio.Event()
     loop = asyncio.get_running_loop()
     installed_signals: list[signal.Signals] = []
@@ -113,13 +136,18 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         extra={
             "event": "application_starting",
             "stream_enabled": config.stream.enabled,
+            "activity_recording_enabled": config.activity.enabled,
+            "vad_enabled": config.vad.enabled,
         },
     )
 
     shutdown_waiter: asyncio.Task[bool] | None = None
     capture_waiter: asyncio.Task[None] | None = None
     streaming_waiter: asyncio.Task[None] | None = None
+    detection_waiter: asyncio.Task[None] | None = None
     try:
+        if detection_service is not None:
+            await detection_service.start()
         if streaming_service is not None:
             await streaming_service.start()
         await capture_service.start()
@@ -134,9 +162,15 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             streaming_waiter = asyncio.create_task(
                 streaming_service.wait(), name="stream-supervisor"
             )
+        if detection_service is not None:
+            detection_waiter = asyncio.create_task(
+                detection_service.wait(), name="detection-supervisor"
+            )
         supervised_tasks = {shutdown_waiter, capture_waiter}
         if streaming_waiter is not None:
             supervised_tasks.add(streaming_waiter)
+        if detection_waiter is not None:
+            supervised_tasks.add(detection_waiter)
         done, _ = await asyncio.wait(
             supervised_tasks,
             return_when=asyncio.FIRST_COMPLETED,
@@ -147,8 +181,16 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if streaming_waiter is not None and streaming_waiter in done:
             await streaming_waiter
             raise RuntimeError("audio streaming stopped unexpectedly")
+        if detection_waiter is not None and detection_waiter in done:
+            await detection_waiter
+            raise RuntimeError("audio detection stopped unexpectedly")
     finally:
-        waiters = (shutdown_waiter, capture_waiter, streaming_waiter)
+        waiters = (
+            shutdown_waiter,
+            capture_waiter,
+            streaming_waiter,
+            detection_waiter,
+        )
         for waiter in waiters:
             if waiter is not None and not waiter.done():
                 waiter.cancel()
@@ -160,15 +202,19 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             await capture_service.stop()
         finally:
             try:
-                if streaming_service is not None:
-                    await streaming_service.stop()
+                if detection_service is not None:
+                    await detection_service.stop()
             finally:
-                for handled_signal in installed_signals:
-                    loop.remove_signal_handler(handled_signal)
-                logger.info(
-                    "Application stopped",
-                    extra={"event": "application_stopped"},
-                )
+                try:
+                    if streaming_service is not None:
+                        await streaming_service.stop()
+                finally:
+                    for handled_signal in installed_signals:
+                        loop.remove_signal_handler(handled_signal)
+                    logger.info(
+                        "Application stopped",
+                        extra={"event": "application_stopped"},
+                    )
 
 
 if __name__ == "__main__":

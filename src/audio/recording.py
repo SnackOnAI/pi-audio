@@ -1,4 +1,4 @@
-"""FFmpeg-backed speech recording primitives."""
+"""FFmpeg-backed sound recording primitives."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class RecordingResult:
 
 
 class AudioRecorder(ABC):
-    """Minimal recording lifecycle used by future speech detection."""
+    """Minimal recording lifecycle used by sound detection."""
 
     @abstractmethod
     async def start(self) -> RecordingSession:
@@ -107,7 +107,7 @@ class FfmpegAudioRecorder(AudioRecorder):
 
         started_at = datetime.now(timezone.utc)
         recording_id = uuid4().hex
-        filename = f"speech-{started_at:%Y%m%dT%H%M%S.%fZ}-{recording_id[:8]}.mp3"
+        filename = f"sound-{started_at:%Y%m%dT%H%M%S.%fZ}-{recording_id[:8]}.mp3"
         directory = self._recording_config.directory
         directory.mkdir(parents=True, exist_ok=True)
         final_path = directory / filename
