@@ -13,9 +13,9 @@ Both components consume immutable PCM frames from `AudioFrameBroker`.
 ## Configuration
 
 `activity.threshold_dbfs` controls sound sensitivity. A more negative value is
-more sensitive: `-40` records quieter sounds than `-25`. The supplied `-25`
-setting was calibrated against the project's Samson Go Mic, but should still be
-tuned for its room, input gain, and the quietest sound that matters.
+more sensitive: `-40` records quieter sounds than `-15`. The supplied `-15`
+setting was tuned against the project's Samson Go Mic and room noise, but should
+still be tuned for its room, input gain, and the quietest sound that matters.
 
 `activity.minimum_active_ms` rejects isolated spikes. `pre_buffer_ms` retains
 audio before the trigger, while `silence_timeout_ms` plus `post_buffer_ms`

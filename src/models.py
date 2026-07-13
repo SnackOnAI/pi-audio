@@ -113,9 +113,13 @@ class UploadConfig:
     enabled: bool
     remote: str
     destination: str
+    scan_interval_seconds: int
+    settle_seconds: int
+    operation_timeout_seconds: int
     retry_initial_seconds: int
     retry_max_seconds: int
     delete_after_success: bool
+    local_retention_hours: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,9 +218,15 @@ class AppConfig:
                 enabled=_require(upload, "enabled", bool),
                 remote=_require(upload, "remote", str),
                 destination=_require(upload, "destination", str),
+                scan_interval_seconds=_require(upload, "scan_interval_seconds", int),
+                settle_seconds=_require(upload, "settle_seconds", int),
+                operation_timeout_seconds=_require(
+                    upload, "operation_timeout_seconds", int
+                ),
                 retry_initial_seconds=_require(upload, "retry_initial_seconds", int),
                 retry_max_seconds=_require(upload, "retry_max_seconds", int),
                 delete_after_success=_require(upload, "delete_after_success", bool),
+                local_retention_hours=_require(upload, "local_retention_hours", int),
             ),
             logging=LoggingConfig(
                 level=_require(logging_config, "level", str).upper(),
@@ -333,11 +343,33 @@ class AppConfig:
         if self.upload.retry_initial_seconds <= 0:
             raise ConfigurationError("upload.retry_initial_seconds must be positive.")
 
+        if not self.upload.remote.strip() or ":" in self.upload.remote:
+            raise ConfigurationError(
+                "upload.remote must be a non-empty rclone remote name without ':'."
+            )
+
+        if not self.upload.destination.strip().strip("/"):
+            raise ConfigurationError("upload.destination must not be empty.")
+
+        if self.upload.scan_interval_seconds <= 0:
+            raise ConfigurationError("upload.scan_interval_seconds must be positive.")
+
+        if self.upload.settle_seconds < 0:
+            raise ConfigurationError("upload.settle_seconds cannot be negative.")
+
+        if self.upload.operation_timeout_seconds <= 0:
+            raise ConfigurationError(
+                "upload.operation_timeout_seconds must be positive."
+            )
+
         if self.upload.retry_max_seconds < self.upload.retry_initial_seconds:
             raise ConfigurationError(
                 "upload.retry_max_seconds must be greater than or equal to "
                 "upload.retry_initial_seconds."
             )
+
+        if self.upload.local_retention_hours < 0:
+            raise ConfigurationError("upload.local_retention_hours cannot be negative.")
 
         if self.logging.max_bytes <= 0:
             raise ConfigurationError("logging.max_bytes must be positive.")
