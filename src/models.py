@@ -270,6 +270,29 @@ class AppConfig:
                 "Only MP3 recording is supported in version 0.1.0."
             )
 
+        if self.recording.bitrate_kbps <= 0:
+            raise ConfigurationError(
+                "recording.bitrate_kbps must be positive."
+            )
+
+        if self.recording.minimum_duration_ms < 0:
+            raise ConfigurationError(
+                "recording.minimum_duration_ms cannot be negative."
+            )
+
+        if self.recording.maximum_duration_seconds <= 0:
+            raise ConfigurationError(
+                "recording.maximum_duration_seconds must be positive."
+            )
+
+        if (
+            self.recording.minimum_duration_ms
+            > self.recording.maximum_duration_seconds * 1_000
+        ):
+            raise ConfigurationError(
+                "recording.minimum_duration_ms cannot exceed the maximum duration."
+            )
+
         if self.upload.retry_initial_seconds <= 0:
             raise ConfigurationError(
                 "upload.retry_initial_seconds must be positive."
