@@ -120,6 +120,25 @@ class UploadConfig:
     retry_max_seconds: int
     delete_after_success: bool
     local_retention_hours: int
+    wait_for_transcription: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptionConfig:
+    enabled: bool
+    provider: str
+    model: str
+    api_key_environment: str
+    language: str
+    prompt: str
+    scan_interval_seconds: int
+    settle_seconds: int
+    operation_timeout_seconds: int
+    retry_initial_seconds: int
+    retry_max_seconds: int
+    minimum_speech_ms: int
+    vad_aggressiveness: int
+    max_monthly_audio_minutes: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +172,7 @@ class AppConfig:
     activity: ActivityConfig
     recording: RecordingConfig
     upload: UploadConfig
+    transcription: TranscriptionConfig
     logging: LoggingConfig
     health: HealthConfig
 
@@ -167,6 +187,7 @@ class AppConfig:
         activity = _section(data, "activity")
         recording = _section(data, "recording")
         upload = _section(data, "upload")
+        transcription = _section(data, "transcription")
         logging_config = _section(data, "logging")
         health = _section(data, "health")
 
@@ -227,6 +248,31 @@ class AppConfig:
                 retry_max_seconds=_require(upload, "retry_max_seconds", int),
                 delete_after_success=_require(upload, "delete_after_success", bool),
                 local_retention_hours=_require(upload, "local_retention_hours", int),
+                wait_for_transcription=_require(upload, "wait_for_transcription", bool),
+            ),
+            transcription=TranscriptionConfig(
+                enabled=_require(transcription, "enabled", bool),
+                provider=_require(transcription, "provider", str),
+                model=_require(transcription, "model", str),
+                api_key_environment=_require(transcription, "api_key_environment", str),
+                language=_require(transcription, "language", str),
+                prompt=_require(transcription, "prompt", str),
+                scan_interval_seconds=_require(
+                    transcription, "scan_interval_seconds", int
+                ),
+                settle_seconds=_require(transcription, "settle_seconds", int),
+                operation_timeout_seconds=_require(
+                    transcription, "operation_timeout_seconds", int
+                ),
+                retry_initial_seconds=_require(
+                    transcription, "retry_initial_seconds", int
+                ),
+                retry_max_seconds=_require(transcription, "retry_max_seconds", int),
+                minimum_speech_ms=_require(transcription, "minimum_speech_ms", int),
+                vad_aggressiveness=_require(transcription, "vad_aggressiveness", int),
+                max_monthly_audio_minutes=_require(
+                    transcription, "max_monthly_audio_minutes", int
+                ),
             ),
             logging=LoggingConfig(
                 level=_require(logging_config, "level", str).upper(),
@@ -370,6 +416,70 @@ class AppConfig:
 
         if self.upload.local_retention_hours < 0:
             raise ConfigurationError("upload.local_retention_hours cannot be negative.")
+
+        if self.transcription.provider != "openai":
+            raise ConfigurationError("transcription.provider must be 'openai'.")
+
+        if self.transcription.model not in {
+            "gpt-4o-transcribe",
+            "gpt-4o-mini-transcribe",
+        }:
+            raise ConfigurationError(
+                "transcription.model must be 'gpt-4o-transcribe' or "
+                "'gpt-4o-mini-transcribe'."
+            )
+
+        if not self.transcription.api_key_environment.strip():
+            raise ConfigurationError(
+                "transcription.api_key_environment must not be empty."
+            )
+
+        if len(self.transcription.language) != 2:
+            raise ConfigurationError(
+                "transcription.language must be a two-letter ISO-639-1 code."
+            )
+
+        if self.transcription.scan_interval_seconds <= 0:
+            raise ConfigurationError(
+                "transcription.scan_interval_seconds must be positive."
+            )
+
+        if self.transcription.settle_seconds < 0:
+            raise ConfigurationError("transcription.settle_seconds cannot be negative.")
+
+        if self.transcription.operation_timeout_seconds <= 0:
+            raise ConfigurationError(
+                "transcription.operation_timeout_seconds must be positive."
+            )
+
+        if self.transcription.retry_initial_seconds <= 0:
+            raise ConfigurationError(
+                "transcription.retry_initial_seconds must be positive."
+            )
+
+        if (
+            self.transcription.retry_max_seconds
+            < self.transcription.retry_initial_seconds
+        ):
+            raise ConfigurationError(
+                "transcription.retry_max_seconds must be greater than or equal to "
+                "transcription.retry_initial_seconds."
+            )
+
+        if self.transcription.minimum_speech_ms <= 0:
+            raise ConfigurationError(
+                "transcription.minimum_speech_ms must be positive."
+            )
+
+        if self.transcription.vad_aggressiveness not in (0, 1, 2, 3):
+            raise ConfigurationError(
+                "transcription.vad_aggressiveness must be between 0 and 3."
+            )
+
+        if self.transcription.max_monthly_audio_minutes <= 0:
+            raise ConfigurationError(
+                "transcription.max_monthly_audio_minutes must be positive."
+            )
 
         if self.logging.max_bytes <= 0:
             raise ConfigurationError("logging.max_bytes must be positive.")

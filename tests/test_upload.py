@@ -43,6 +43,7 @@ def upload_config(
     delete_after_success: bool,
     settle_seconds: int = 0,
     local_retention_hours: int = 0,
+    wait_for_transcription: bool = False,
 ) -> UploadConfig:
     return UploadConfig(
         enabled=True,
@@ -55,6 +56,7 @@ def upload_config(
         retry_max_seconds=4,
         delete_after_success=delete_after_success,
         local_retention_hours=local_retention_hours,
+        wait_for_transcription=wait_for_transcription,
     )
 
 
@@ -161,6 +163,52 @@ class RcloneUploadServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(audio_path.exists())
             self.assertFalse(metadata_path.exists())
             self.assertFalse(bundle.receipt_path.exists())
+
+    async def test_late_transcript_is_uploaded_before_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path, _ = self._write_bundle(root)
+            service = RcloneUploadService(
+                recording_config(root),
+                upload_config(
+                    delete_after_success=True,
+                    wait_for_transcription=True,
+                ),
+            )
+            bundle = service._bundle(root, audio_path.stem)
+            create_process = AsyncMock(
+                side_effect=(
+                    FakeProcess(),
+                    FakeProcess(),
+                    FakeProcess(),
+                    FakeProcess(),
+                )
+            )
+
+            with patch("asyncio.create_subprocess_exec", create_process):
+                await service._process_bundle(bundle)
+                self.assertTrue(audio_path.exists())
+
+                bundle.transcript_path.write_text("hello\n", encoding="utf-8")
+                bundle.transcript_record_path.write_text("{}", encoding="utf-8")
+                await service._process_bundle(bundle)
+
+            self.assertEqual(create_process.await_count, 4)
+            uploaded_names = [
+                Path(call.args[2]).name for call in create_process.await_args_list
+            ]
+            self.assertEqual(
+                uploaded_names,
+                [
+                    audio_path.name,
+                    bundle.metadata_path.name,
+                    bundle.transcript_path.name,
+                    bundle.transcript_record_path.name,
+                ],
+            )
+            self.assertFalse(audio_path.exists())
+            self.assertFalse(bundle.transcript_path.exists())
+            self.assertFalse(bundle.transcript_record_path.exists())
 
     async def test_uploaded_bundle_is_retained_until_retention_expires(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
