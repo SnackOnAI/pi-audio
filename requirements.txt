@@ -1,2 +1,3 @@
 PyYAML>=6.0,<7.0
 webrtcvad-wheels>=2.0.14,<3.0
+openai>=2.0,<3.0

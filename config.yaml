@@ -50,6 +50,23 @@ upload:
   retry_max_seconds: 3600
   delete_after_success: true
   local_retention_hours: 48
+  wait_for_transcription: true
+
+transcription:
+  enabled: true
+  provider: "openai"
+  model: "gpt-4o-transcribe"
+  api_key_environment: "OPENAI_API_KEY"
+  language: "en"
+  prompt: "Raspberry Pi room audio captured with a Samson Go Mic. Preserve names, technical terms, and natural punctuation."
+  scan_interval_seconds: 10
+  settle_seconds: 2
+  operation_timeout_seconds: 600
+  retry_initial_seconds: 30
+  retry_max_seconds: 3600
+  minimum_speech_ms: 300
+  vad_aggressiveness: 2
+  max_monthly_audio_minutes: 1500
 
 logging:
   level: "INFO"

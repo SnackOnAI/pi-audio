@@ -22,6 +22,11 @@ from .audio import (
 from .config import load_config
 from .log_setup import configure_logging
 from .models import AppConfig, ConfigurationError
+from .transcription import (
+    FfmpegSpeechScreener,
+    OpenAITranscriptionClient,
+    RecordingTranscriptionService,
+)
 from .upload import RcloneUploadService
 
 
@@ -130,6 +135,17 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if config.upload.enabled
         else None
     )
+    transcription_service = (
+        RecordingTranscriptionService(
+            config.recording,
+            config.transcription,
+            FfmpegSpeechScreener(config.audio, config.transcription),
+            OpenAITranscriptionClient(config.transcription),
+            logger=logger,
+        )
+        if config.transcription.enabled
+        else None
+    )
     shutdown_requested = asyncio.Event()
     loop = asyncio.get_running_loop()
     installed_signals: list[signal.Signals] = []
@@ -149,6 +165,8 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             "activity_recording_enabled": config.activity.enabled,
             "vad_enabled": config.vad.enabled,
             "upload_enabled": config.upload.enabled,
+            "transcription_enabled": config.transcription.enabled,
+            "transcription_model": config.transcription.model,
         },
     )
 
@@ -157,7 +175,10 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
     streaming_waiter: asyncio.Task[None] | None = None
     detection_waiter: asyncio.Task[None] | None = None
     upload_waiter: asyncio.Task[None] | None = None
+    transcription_waiter: asyncio.Task[None] | None = None
     try:
+        if transcription_service is not None:
+            await transcription_service.start()
         if upload_service is not None:
             await upload_service.start()
         if detection_service is not None:
@@ -184,6 +205,10 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             upload_waiter = asyncio.create_task(
                 upload_service.wait(), name="upload-supervisor"
             )
+        if transcription_service is not None:
+            transcription_waiter = asyncio.create_task(
+                transcription_service.wait(), name="transcription-supervisor"
+            )
         supervised_tasks = {shutdown_waiter, capture_waiter}
         if streaming_waiter is not None:
             supervised_tasks.add(streaming_waiter)
@@ -191,6 +216,8 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             supervised_tasks.add(detection_waiter)
         if upload_waiter is not None:
             supervised_tasks.add(upload_waiter)
+        if transcription_waiter is not None:
+            supervised_tasks.add(transcription_waiter)
         done, _ = await asyncio.wait(
             supervised_tasks,
             return_when=asyncio.FIRST_COMPLETED,
@@ -207,6 +234,9 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if upload_waiter is not None and upload_waiter in done:
             await upload_waiter
             raise RuntimeError("recording upload stopped unexpectedly")
+        if transcription_waiter is not None and transcription_waiter in done:
+            await transcription_waiter
+            raise RuntimeError("recording transcription stopped unexpectedly")
     finally:
         waiters = (
             shutdown_waiter,
@@ -214,6 +244,7 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             streaming_waiter,
             detection_waiter,
             upload_waiter,
+            transcription_waiter,
         )
         for waiter in waiters:
             if waiter is not None and not waiter.done():
@@ -230,19 +261,23 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
                     await detection_service.stop()
             finally:
                 try:
-                    if upload_service is not None:
-                        await upload_service.stop()
+                    if transcription_service is not None:
+                        await transcription_service.stop()
                 finally:
                     try:
-                        if streaming_service is not None:
-                            await streaming_service.stop()
+                        if upload_service is not None:
+                            await upload_service.stop()
                     finally:
-                        for handled_signal in installed_signals:
-                            loop.remove_signal_handler(handled_signal)
-                        logger.info(
-                            "Application stopped",
-                            extra={"event": "application_stopped"},
-                        )
+                        try:
+                            if streaming_service is not None:
+                                await streaming_service.stop()
+                        finally:
+                            for handled_signal in installed_signals:
+                                loop.remove_signal_handler(handled_signal)
+                            logger.info(
+                                "Application stopped",
+                                extra={"event": "application_stopped"},
+                            )
 
 
 if __name__ == "__main__":

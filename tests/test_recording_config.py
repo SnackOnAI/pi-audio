@@ -93,6 +93,29 @@ class RecordingConfigurationTests(unittest.TestCase):
                 with self.assertRaises(ConfigurationError):
                     AppConfig.from_dict(data)
 
+    def test_rejects_invalid_transcription_configuration(self) -> None:
+        invalid_values = (
+            ("provider", "other"),
+            ("model", "whisper-1"),
+            ("api_key_environment", ""),
+            ("language", "english"),
+            ("scan_interval_seconds", 0),
+            ("settle_seconds", -1),
+            ("operation_timeout_seconds", 0),
+            ("retry_initial_seconds", 0),
+            ("retry_max_seconds", 29),
+            ("minimum_speech_ms", 0),
+            ("vad_aggressiveness", 4),
+            ("max_monthly_audio_minutes", 0),
+        )
+
+        for key, value in invalid_values:
+            data = deepcopy(self.config_data)
+            data["transcription"][key] = value
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(ConfigurationError):
+                    AppConfig.from_dict(data)
+
 
 if __name__ == "__main__":
     unittest.main()

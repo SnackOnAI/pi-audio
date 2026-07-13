@@ -25,6 +25,8 @@ class RecordingBundle:
     audio_path: Path
     metadata_path: Path
     receipt_path: Path
+    transcript_path: Path
+    transcript_record_path: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,14 +140,14 @@ class RcloneUploadService:
         return [self._bundle(directory, stem) for stem in sorted(stems)]
 
     async def _process_bundle(self, bundle: RecordingBundle) -> None:
-        if not bundle.receipt_path.exists():
-            if not bundle.audio_path.is_file():
-                return
-            paths = [bundle.audio_path]
-            if bundle.metadata_path.is_file():
-                paths.append(bundle.metadata_path)
+        if not bundle.audio_path.is_file():
+            return
+        paths = self._available_paths(bundle)
+        uploaded_files = self._read_uploaded_files(bundle)
+        pending_paths = [path for path in paths if path.name not in uploaded_files]
 
-            for path in paths:
+        if pending_paths:
+            for path in pending_paths:
                 await self._upload_file(path)
             try:
                 self._write_receipt(bundle, paths)
@@ -162,7 +164,11 @@ class RcloneUploadService:
                 },
             )
 
-        if self._upload_config.delete_after_success and self._retention_elapsed(bundle):
+        if (
+            self._upload_config.delete_after_success
+            and self._ready_for_cleanup(bundle)
+            and self._retention_elapsed(bundle)
+        ):
             try:
                 self._delete_uploaded_bundle(bundle)
             except OSError as exc:
@@ -237,8 +243,8 @@ class RcloneUploadService:
         temporary_path.replace(bundle.receipt_path)
 
     def _delete_uploaded_bundle(self, bundle: RecordingBundle) -> None:
-        bundle.metadata_path.unlink(missing_ok=True)
-        bundle.audio_path.unlink(missing_ok=True)
+        for path in self._available_paths(bundle):
+            path.unlink(missing_ok=True)
         bundle.receipt_path.unlink(missing_ok=True)
         self._logger.info(
             "Uploaded local recording deleted",
@@ -260,10 +266,44 @@ class RcloneUploadService:
             return False
         return time.time() - uploaded_at >= retention_seconds
 
+    def _ready_for_cleanup(self, bundle: RecordingBundle) -> bool:
+        return (
+            not self._upload_config.wait_for_transcription
+            or bundle.transcript_record_path.is_file()
+        )
+
+    @staticmethod
+    def _available_paths(bundle: RecordingBundle) -> list[Path]:
+        return [
+            path
+            for path in (
+                bundle.audio_path,
+                bundle.metadata_path,
+                bundle.transcript_path,
+                bundle.transcript_record_path,
+            )
+            if path.is_file()
+        ]
+
+    @staticmethod
+    def _read_uploaded_files(bundle: RecordingBundle) -> set[str]:
+        try:
+            data = json.loads(bundle.receipt_path.read_text(encoding="utf-8"))
+            files = data.get("files")
+            if files is None:
+                return {
+                    path.name for path in RcloneUploadService._available_paths(bundle)
+                }
+            return {item for item in files if isinstance(item, str)}
+        except (FileNotFoundError, OSError, json.JSONDecodeError, AttributeError):
+            return set()
+
     @staticmethod
     def _bundle(directory: Path, stem: str) -> RecordingBundle:
         return RecordingBundle(
             audio_path=directory / f"{stem}.mp3",
             metadata_path=directory / f"{stem}.json",
             receipt_path=directory / f"{stem}.uploaded.json",
+            transcript_path=directory / f"{stem}.txt",
+            transcript_record_path=directory / f"{stem}.transcript.json",
         )
