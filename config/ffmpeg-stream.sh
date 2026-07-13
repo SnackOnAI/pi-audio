@@ -9,4 +9,4 @@ exec ffmpeg \
 -b:a 64k \
 -content_type audio/mpeg \
 -f mp3 \
-icecast://source:dlAghu26%40IC@localhost:8000/live
+icecast://source:changeme@localhost:8000/live
