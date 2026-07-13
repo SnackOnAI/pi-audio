@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import webrtcvad  # type: ignore[import-untyped]
 
 from ..models import ActivityConfig, AudioConfig, RecordingConfig, VadConfig
+from ..recording_control import recording_is_paused
 from .broker import AudioFrameBroker, AudioFrameSubscription
 from .models import AudioFrame
 from .recording import AudioRecorder
@@ -136,6 +137,7 @@ class SoundRecordingService:
         self._speech_frames = 0
         self._speech_active = False
         self._recording = False
+        self._operator_paused = False
         self._subscription: AudioFrameSubscription | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -176,6 +178,8 @@ class SoundRecordingService:
             await self._process_frame(frame)
 
     async def _process_frame(self, frame: AudioFrame) -> None:
+        if await self._handle_operator_pause():
+            return
         self._classify_voice(frame)
         activity = self._activity_detector.classify(frame)
 
@@ -203,6 +207,30 @@ class SoundRecordingService:
         self._silent_frames = 0 if activity.active else self._silent_frames + 1
         if self._silent_frames >= self._ending_silence_frames:
             await self._finish_recording("silence")
+
+    async def _handle_operator_pause(self) -> bool:
+        paused = recording_is_paused(self._recording_config.directory)
+        if paused:
+            if not self._operator_paused:
+                self._operator_paused = True
+                await self._finish_recording("operator_paused")
+                self._pre_buffer.clear()
+                self._active_frames = 0
+                self._speech_frames = 0
+                self._speech_active = False
+                self._logger.info(
+                    "Local recording paused",
+                    extra={"event": "recording_paused"},
+                )
+            return True
+
+        if self._operator_paused:
+            self._operator_paused = False
+            self._logger.info(
+                "Local recording resumed",
+                extra={"event": "recording_resumed"},
+            )
+        return False
 
     async def _start_recording(self, level_dbfs: float) -> None:
         session = await self._recorder.start()

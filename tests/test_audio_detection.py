@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ from src.audio.detection import (
 from src.audio.models import AudioFrame
 from src.audio.recording import AudioRecorder, RecordingResult, RecordingSession
 from src.models import ActivityConfig, AudioConfig, RecordingConfig, VadConfig
+from src.recording_control import set_recording_paused
 
 
 def audio_config() -> AudioConfig:
@@ -164,6 +166,39 @@ class AudioDetectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recorder.sessions, 2)
         self.assertEqual(recorder.finished, 1)
         self.assertEqual(len(recorder.frames), 35)
+
+    async def test_operator_pause_closes_recording_and_discards_paused_buffer(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            recording = RecordingConfig(Path(directory), "mp3", 64, 0, 10, True)
+            recorder = FakeRecorder()
+            service = self._service(
+                FixedActivityDetector(True),
+                FixedVoiceDetector(False),
+                recorder,
+                recording=recording,
+            )
+
+            await service._process_frame(pcm_frame(0, 10_000))
+            await service._process_frame(pcm_frame(1, 10_000))
+            set_recording_paused(recording.directory, True)
+            await service._process_frame(pcm_frame(2, 10_000))
+            await service._process_frame(pcm_frame(3, 10_000))
+
+            self.assertEqual(recorder.sessions, 1)
+            self.assertEqual(recorder.finished, 1)
+            self.assertEqual([frame.sequence for frame in recorder.frames], [0, 1])
+
+            set_recording_paused(recording.directory, False)
+            await service._process_frame(pcm_frame(4, 10_000))
+            await service._process_frame(pcm_frame(5, 10_000))
+
+            self.assertEqual(recorder.sessions, 2)
+            self.assertEqual(
+                [frame.sequence for frame in recorder.frames],
+                [0, 1, 4, 5],
+            )
 
     def _service(
         self,
