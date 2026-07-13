@@ -1,0 +1,16 @@
+[Unit]
+Description=Pi Audio Stack
+
+[Service]
+Type=simple
+WorkingDirectory=%h/pi-audio
+EnvironmentFile=%h/pi-audio/.env
+ExecStart=%h/pi-audio/.venv/bin/python -m src.main --config %h/pi-audio/config.yaml
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+KillSignal=SIGTERM
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

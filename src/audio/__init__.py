@@ -8,6 +8,7 @@ from .broker import (
 from .capture import AudioCaptureService
 from .models import AudioFrame
 from .source import AlsaAudioSource, AudioSource, AudioSourceError
+from .stream import AudioStreamingError, FfmpegStreamingService
 
 __all__ = [
     "AlsaAudioSource",
@@ -18,4 +19,6 @@ __all__ = [
     "AudioFrameSubscription",
     "AudioSource",
     "AudioSourceError",
+    "AudioStreamingError",
+    "FfmpegStreamingService",
 ]

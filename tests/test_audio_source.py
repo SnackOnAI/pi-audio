@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import stat
 import tempfile
 import textwrap
@@ -28,9 +27,7 @@ class AlsaAudioSourceTests(unittest.IsolatedAsyncioTestCase):
             second = await source.read_frame()
             await source.close()
 
-            arguments = (Path(directory) / "arguments").read_text(
-                encoding="utf-8"
-            )
+            arguments = (Path(directory) / "arguments").read_text(encoding="utf-8")
 
         self.assertEqual(first.data, b"\x01\x02\x01\x02")
         self.assertEqual(second.data, first.data)

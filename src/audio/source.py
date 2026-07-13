@@ -64,11 +64,7 @@ class AlsaAudioSource(AudioSource):
 
     @property
     def chunk_size_bytes(self) -> int:
-        return (
-            self._frames_per_chunk
-            * self._channels
-            * self._sample_width_bytes
-        )
+        return self._frames_per_chunk * self._channels * self._sample_width_bytes
 
     async def start(self) -> None:
         if self._process is not None:
@@ -95,9 +91,7 @@ class AlsaAudioSource(AudioSource):
                 stderr=asyncio.subprocess.PIPE,
             )
         except OSError as exc:
-            raise AudioSourceError(
-                f"unable to start arecord: {exc}"
-            ) from exc
+            raise AudioSourceError(f"unable to start arecord: {exc}") from exc
 
         self._process = process
         self._sequence = 0
@@ -152,12 +146,8 @@ class AlsaAudioSource(AudioSource):
                 await self._stderr_task
             self._stderr_task = None
 
-    async def _drain_stderr(
-        self, process: asyncio.subprocess.Process
-    ) -> None:
+    async def _drain_stderr(self, process: asyncio.subprocess.Process) -> None:
         if process.stderr is None:
             return
         while line := await process.stderr.readline():
-            self._stderr_tail.append(
-                line.decode("utf-8", errors="replace").strip()
-            )
+            self._stderr_tail.append(line.decode("utf-8", errors="replace").strip())

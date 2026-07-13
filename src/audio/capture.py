@@ -51,9 +51,7 @@ class AudioCaptureService:
             await asyncio.shield(self._task)
 
     async def _run(self) -> None:
-        self._logger.info(
-            "Audio capture started", extra={"event": "capture_started"}
-        )
+        self._logger.info("Audio capture started", extra={"event": "capture_started"})
         try:
             while not self._stop_requested.is_set():
                 try:
