@@ -167,6 +167,37 @@ class RecordingTranscriptionServiceTests(unittest.IsolatedAsyncioTestCase):
             ledger = json.loads(ledgers[0].read_text(encoding="utf-8"))
             self.assertEqual(ledger["audio_seconds"], 65.5)
 
+    async def test_empty_cloud_result_is_committed_without_paid_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path = root / "sound-test.mp3"
+            audio_path.write_bytes(b"mp3")
+            screener = FakeScreener(SpeechScreenResult(True, 5.9, 900))
+            client = FakeClient(
+                TranscriptionResponse(
+                    "",
+                    request_id="req_empty",
+                    usage={"audio_tokens": 59},
+                )
+            )
+            service = RecordingTranscriptionService(
+                recording_config(root),
+                transcription_config(),
+                screener,
+                client,
+            )
+
+            await service._process_recording(audio_path)
+
+            record = json.loads(
+                audio_path.with_suffix(".transcript.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(record["status"], "no_transcript")
+            self.assertIsNone(record["text_file"])
+            self.assertEqual(record["request_ids"], ["req_empty"])
+            self.assertFalse(audio_path.with_suffix(".txt").exists())
+            self.assertEqual(len(client.paths), 1)
+
     async def test_monthly_limit_preserves_recording_for_later_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

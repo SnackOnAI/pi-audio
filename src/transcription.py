@@ -100,8 +100,6 @@ class OpenAITranscriptionClient:
             raise TranscriptionError(f"OpenAI request failed: {exc}") from exc
 
         text = getattr(response, "text", "").strip()
-        if not text:
-            raise TranscriptionError("OpenAI returned an empty transcript")
         usage_object = getattr(response, "usage", None)
         usage = (
             usage_object.model_dump(mode="json")
@@ -395,15 +393,17 @@ class RecordingTranscriptionService:
                 responses.append(response)
 
         text = "\n\n".join(response.text.strip() for response in responses).strip()
-        self._write_text(audio_path, text)
+        text_path = self._text_path(audio_path) if text else None
+        if text_path is not None:
+            self._write_text(audio_path, text)
         record = TranscriptRecord(
-            status="completed",
+            status="completed" if text else "no_transcript",
             audio_file=audio_path.name,
             model=self._config.model,
             language=self._config.language,
             duration_seconds=screen.duration_seconds,
             completed_at=datetime.now(timezone.utc).isoformat(),
-            text_file=self._text_path(audio_path).name,
+            text_file=text_path.name if text_path is not None else None,
             request_ids=tuple(
                 response.request_id
                 for response in responses
@@ -417,9 +417,9 @@ class RecordingTranscriptionService:
         self._add_monthly_usage(screen.duration_seconds)
         self._write_record(audio_path, record)
         self._logger.info(
-            "Recording transcribed",
+            "Recording transcribed" if text else "Recording contained no transcript",
             extra={
-                "event": "transcription_completed",
+                "event": ("transcription_completed" if text else "transcription_empty"),
                 "path": str(audio_path),
                 "duration_seconds": screen.duration_seconds,
                 "model": self._config.model,

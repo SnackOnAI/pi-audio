@@ -22,6 +22,10 @@ Recordings longer than 10 minutes or larger than 24 MiB are split into 10-minute
 chunks before upload to the transcription API. This keeps responses below the
 model's output limit. The chunks are temporary and are removed after the request.
 
+If the cloud model finds no intelligible words in a VAD-positive recording, the
+worker commits a `no_transcript` record without a `.txt` file. This is a completed
+outcome and is not retried, preventing repeated charges for the same noise.
+
 ## API key
 
 Create a project API key in the OpenAI Platform. On the Pi, edit the service
