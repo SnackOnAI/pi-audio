@@ -13,8 +13,9 @@ the final MP3.
 After every available file succeeds, the service writes an atomic
 `.uploaded.json` receipt. This receipt makes recovery crash-safe:
 
-- With `delete_after_success: true`, local audio, metadata, and then the receipt
-  are removed. If cleanup is interrupted, the receipt resumes cleanup without
+- With `delete_after_success: true`, local audio and metadata remain available
+  for `local_retention_hours` after confirmed upload. They and the receipt are
+  then removed. If cleanup is interrupted, the receipt resumes cleanup without
   uploading the recording again.
 - With `delete_after_success: false`, the receipt remains beside the recording
   and prevents duplicate uploads after scans or restarts.
@@ -31,8 +32,9 @@ rclone listremotes
 rclone lsd dropbox-audio:
 ```
 
-The supplied configuration uploads to `dropbox-audio:Pi Audio`. The scan,
-settling, operation timeout, and retry values are independently configurable.
+The supplied configuration uploads to `dropbox-audio:Pi Audio` and retains a
+48-hour local copy. The scan, settling, operation timeout, retention, and retry
+values are independently configurable.
 Structured logs use `upload_completed`, `upload_failed`, and
 `upload_local_deleted` events.
 

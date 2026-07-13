@@ -162,7 +162,7 @@ class RcloneUploadService:
                 },
             )
 
-        if self._upload_config.delete_after_success:
+        if self._upload_config.delete_after_success and self._retention_elapsed(bundle):
             try:
                 self._delete_uploaded_bundle(bundle)
             except OSError as exc:
@@ -251,6 +251,14 @@ class RcloneUploadService:
     def _remote_target(self, path: Path) -> str:
         destination = self._upload_config.destination.strip("/")
         return f"{self._upload_config.remote}:{destination}/{path.name}"
+
+    def _retention_elapsed(self, bundle: RecordingBundle) -> bool:
+        retention_seconds = self._upload_config.local_retention_hours * 3_600
+        try:
+            uploaded_at = bundle.receipt_path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        return time.time() - uploaded_at >= retention_seconds
 
     @staticmethod
     def _bundle(directory: Path, stem: str) -> RecordingBundle:

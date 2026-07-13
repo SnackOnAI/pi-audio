@@ -83,6 +83,7 @@ class RecordingConfigurationTests(unittest.TestCase):
             ("operation_timeout_seconds", 0),
             ("retry_initial_seconds", 0),
             ("retry_max_seconds", 29),
+            ("local_retention_hours", -1),
         )
 
         for key, value in invalid_values:

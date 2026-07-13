@@ -39,7 +39,10 @@ def recording_config(directory: Path) -> RecordingConfig:
 
 
 def upload_config(
-    *, delete_after_success: bool, settle_seconds: int = 0
+    *,
+    delete_after_success: bool,
+    settle_seconds: int = 0,
+    local_retention_hours: int = 0,
 ) -> UploadConfig:
     return UploadConfig(
         enabled=True,
@@ -51,6 +54,7 @@ def upload_config(
         retry_initial_seconds=1,
         retry_max_seconds=4,
         delete_after_success=delete_after_success,
+        local_retention_hours=local_retention_hours,
     )
 
 
@@ -154,6 +158,35 @@ class RcloneUploadServiceTests(unittest.IsolatedAsyncioTestCase):
                 await service._process_bundle(bundle)
 
             create_process.assert_not_awaited()
+            self.assertFalse(audio_path.exists())
+            self.assertFalse(metadata_path.exists())
+            self.assertFalse(bundle.receipt_path.exists())
+
+    async def test_uploaded_bundle_is_retained_until_retention_expires(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path, metadata_path = self._write_bundle(root)
+            service = RcloneUploadService(
+                recording_config(root),
+                upload_config(
+                    delete_after_success=True,
+                    local_retention_hours=48,
+                ),
+            )
+            bundle = service._bundle(root, audio_path.stem)
+            create_process = AsyncMock(side_effect=(FakeProcess(), FakeProcess()))
+
+            with patch("asyncio.create_subprocess_exec", create_process):
+                await service._process_bundle(bundle)
+
+            self.assertTrue(audio_path.exists())
+            self.assertTrue(metadata_path.exists())
+            self.assertTrue(bundle.receipt_path.exists())
+
+            with patch("src.upload.time.time", return_value=10**12):
+                await service._process_bundle(bundle)
+
+            self.assertEqual(create_process.await_count, 2)
             self.assertFalse(audio_path.exists())
             self.assertFalse(metadata_path.exists())
             self.assertFalse(bundle.receipt_path.exists())

@@ -49,6 +49,7 @@ upload:
   retry_initial_seconds: 30
   retry_max_seconds: 3600
   delete_after_success: true
+  local_retention_hours: 48
 
 logging:
   level: "INFO"

@@ -119,6 +119,7 @@ class UploadConfig:
     retry_initial_seconds: int
     retry_max_seconds: int
     delete_after_success: bool
+    local_retention_hours: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +226,7 @@ class AppConfig:
                 retry_initial_seconds=_require(upload, "retry_initial_seconds", int),
                 retry_max_seconds=_require(upload, "retry_max_seconds", int),
                 delete_after_success=_require(upload, "delete_after_success", bool),
+                local_retention_hours=_require(upload, "local_retention_hours", int),
             ),
             logging=LoggingConfig(
                 level=_require(logging_config, "level", str).upper(),
@@ -365,6 +367,9 @@ class AppConfig:
                 "upload.retry_max_seconds must be greater than or equal to "
                 "upload.retry_initial_seconds."
             )
+
+        if self.upload.local_retention_hours < 0:
+            raise ConfigurationError("upload.local_retention_hours cannot be negative.")
 
         if self.logging.max_bytes <= 0:
             raise ConfigurationError("logging.max_bytes must be positive.")
