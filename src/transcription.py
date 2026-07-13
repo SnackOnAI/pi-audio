@@ -23,6 +23,15 @@ class TranscriptionError(RuntimeError):
     """Raised when a recording cannot be screened or transcribed safely."""
 
 
+class TranscriptionPaused(TranscriptionError):
+    """Raised when the operator has paused paid transcription requests."""
+
+
+def transcription_pause_path(recording_directory: Path) -> Path:
+    """Return the durable runtime pause marker for transcription."""
+    return recording_directory / ".transcription-paused"
+
+
 @dataclass(frozen=True, slots=True)
 class SpeechScreenResult:
     speech: bool
@@ -278,14 +287,21 @@ class RecordingTranscriptionService:
     async def _run(self) -> None:
         retry_delay = self._config.retry_initial_seconds
         while True:
+            if self.is_paused:
+                await asyncio.sleep(self._config.scan_interval_seconds)
+                continue
             recordings = self._discover_recordings()
             if not recordings:
                 await asyncio.sleep(self._config.scan_interval_seconds)
                 continue
             failed = False
+            paused = False
             for audio_path in recordings:
                 try:
                     await self._process_recording(audio_path)
+                except TranscriptionPaused:
+                    paused = True
+                    break
                 except TranscriptionError as exc:
                     failed = True
                     self._logger.warning(
@@ -307,6 +323,12 @@ class RecordingTranscriptionService:
                     retry_delay = self._config.retry_initial_seconds
             if not failed:
                 await asyncio.sleep(self._config.scan_interval_seconds)
+
+            if paused:
+                self._logger.info(
+                    "Transcription API usage is paused",
+                    extra={"event": "transcription_paused"},
+                )
 
     def _discover_recordings(self) -> list[Path]:
         now = time.time()
@@ -353,6 +375,9 @@ class RecordingTranscriptionService:
 
         if not self._within_monthly_limit(screen.duration_seconds):
             raise TranscriptionError("monthly transcription audio-minute limit reached")
+
+        if self.is_paused:
+            raise TranscriptionPaused("transcription API usage is paused")
 
         responses: list[TranscriptionResponse] = []
         with tempfile.TemporaryDirectory(prefix="pi-audio-transcription-") as work:
@@ -520,6 +545,10 @@ class RecordingTranscriptionService:
     def _usage_path(self) -> Path:
         month = datetime.now(timezone.utc).strftime("%Y-%m")
         return self._recording_config.directory / f".transcription-usage-{month}.json"
+
+    @property
+    def is_paused(self) -> bool:
+        return transcription_pause_path(self._recording_config.directory).exists()
 
     def _write_text(self, audio_path: Path, text: str) -> None:
         path = self._text_path(audio_path)

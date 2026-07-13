@@ -13,6 +13,7 @@ from src.transcription import (
     RecordingTranscriptionService,
     SpeechScreenResult,
     TranscriptionError,
+    TranscriptionPaused,
     TranscriptionResponse,
 )
 
@@ -183,6 +184,31 @@ class RecordingTranscriptionServiceTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(TranscriptionError, "monthly"):
                 await service._process_recording(audio_path)
 
+            self.assertTrue(audio_path.exists())
+            self.assertEqual(client.paths, [])
+            self.assertFalse(audio_path.with_suffix(".transcript.json").exists())
+
+    async def test_pause_marker_prevents_cloud_request_and_preserves_audio(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path = root / "sound-test.mp3"
+            audio_path.write_bytes(b"mp3")
+            (root / ".transcription-paused").write_text("paused\n", encoding="utf-8")
+            screener = FakeScreener(SpeechScreenResult(True, 5.0, 600))
+            client = FakeClient(TranscriptionResponse("unused"))
+            service = RecordingTranscriptionService(
+                recording_config(root),
+                transcription_config(),
+                screener,
+                client,
+            )
+
+            with self.assertRaises(TranscriptionPaused):
+                await service._process_recording(audio_path)
+
+            self.assertTrue(service.is_paused)
             self.assertTrue(audio_path.exists())
             self.assertEqual(client.paths, [])
             self.assertFalse(audio_path.with_suffix(".transcript.json").exists())

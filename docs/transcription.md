@@ -66,6 +66,27 @@ Check current model pricing in the OpenAI pricing documentation before changing 
 limit. Billing is token-based and therefore varies with both audio and transcript
 length.
 
+## Pause or start API usage
+
+These commands take effect without restarting `audio-stack.service`. Recording,
+Icecast streaming, sound detection, local VAD, and Dropbox uploads continue normally.
+
+```bash
+cd ~/pi-audio
+
+# Prevent new paid transcription requests
+.venv/bin/python -m scripts.transcription_control pause
+
+# Check the current state
+.venv/bin/python -m scripts.transcription_control status
+
+# Allow transcription requests again
+.venv/bin/python -m scripts.transcription_control start
+```
+
+An API request already in flight is allowed to finish. While paused, finalized audio
+remains available and is processed after transcription is started again.
+
 ## Verification
 
 After speaking near the microphone and allowing the recording to finish:
