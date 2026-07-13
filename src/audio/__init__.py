@@ -6,6 +6,16 @@ from .broker import (
     AudioFrameSubscription,
 )
 from .capture import AudioCaptureService
+from .detection import (
+    ActivityDecision,
+    AudioActivityDetector,
+    AudioDetectionError,
+    RmsAudioActivityDetector,
+    SoundRecordingService,
+    VoiceActivityDetector,
+    VoiceDecision,
+    WebRtcVoiceActivityDetector,
+)
 from .models import AudioFrame
 from .recording import (
     AudioRecorder,
@@ -19,7 +29,10 @@ from .stream import AudioStreamingError, FfmpegStreamingService
 
 __all__ = [
     "AlsaAudioSource",
+    "ActivityDecision",
+    "AudioActivityDetector",
     "AudioCaptureService",
+    "AudioDetectionError",
     "AudioFrame",
     "AudioFrameBroker",
     "AudioFrameBrokerFull",
@@ -33,4 +46,9 @@ __all__ = [
     "FfmpegAudioRecorder",
     "RecordingResult",
     "RecordingSession",
+    "RmsAudioActivityDetector",
+    "SoundRecordingService",
+    "VoiceActivityDetector",
+    "VoiceDecision",
+    "WebRtcVoiceActivityDetector",
 ]

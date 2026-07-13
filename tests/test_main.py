@@ -39,6 +39,7 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_signal_stops_capture_and_streaming(self) -> None:
         capture = FakeService()
         streaming = FakeService()
+        detection = FakeService()
         callbacks: dict[signal.Signals, Callable[[], None]] = {}
         loop = asyncio.get_running_loop()
 
@@ -48,7 +49,7 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
             callbacks[handled_signal] = callback
 
         with (
-            self._runtime_patches(capture, streaming),
+            self._runtime_patches(capture, streaming, detection),
             patch.object(loop, "add_signal_handler", side_effect=add_signal_handler),
             patch.object(loop, "remove_signal_handler", return_value=True),
         ):
@@ -64,14 +65,17 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(capture.stopped)
         self.assertTrue(streaming.started)
         self.assertTrue(streaming.stopped)
+        self.assertTrue(detection.started)
+        self.assertTrue(detection.stopped)
 
     async def test_capture_failure_still_stops_streaming(self) -> None:
         capture = FakeService(AudioSourceError("capture failed"))
         streaming = FakeService()
+        detection = FakeService()
         loop = asyncio.get_running_loop()
 
         with (
-            self._runtime_patches(capture, streaming),
+            self._runtime_patches(capture, streaming, detection),
             patch.object(loop, "add_signal_handler"),
             patch.object(loop, "remove_signal_handler", return_value=True),
         ):
@@ -80,11 +84,15 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(capture.stopped)
         self.assertTrue(streaming.stopped)
+        self.assertTrue(detection.stopped)
 
     def _runtime_patches(
-        self, capture: FakeService, streaming: FakeService
+        self,
+        capture: FakeService,
+        streaming: FakeService,
+        detection: FakeService,
     ) -> "_RuntimePatches":
-        return _RuntimePatches(capture, streaming)
+        return _RuntimePatches(capture, streaming, detection)
 
     def _config(self) -> AppConfig:
         with patch.dict(os.environ, {"ICECAST_SOURCE_PASSWORD": "test"}):
@@ -105,11 +113,20 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class _RuntimePatches:
-    def __init__(self, capture: FakeService, streaming: FakeService) -> None:
+    def __init__(
+        self,
+        capture: FakeService,
+        streaming: FakeService,
+        detection: FakeService,
+    ) -> None:
         self._patches = (
             patch("src.main.AlsaAudioSource"),
             patch("src.main.AudioCaptureService", return_value=capture),
             patch("src.main.FfmpegStreamingService", return_value=streaming),
+            patch("src.main.FfmpegAudioRecorder"),
+            patch("src.main.RmsAudioActivityDetector"),
+            patch("src.main.WebRtcVoiceActivityDetector"),
+            patch("src.main.SoundRecordingService", return_value=detection),
         )
 
     def __enter__(self) -> "_RuntimePatches":

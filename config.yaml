@@ -19,8 +19,14 @@ stream:
 
 vad:
   enabled: true
-  threshold: 0.50
+  engine: "webrtc"
+  aggressiveness: 2
   minimum_speech_ms: 250
+
+activity:
+  enabled: true
+  threshold_dbfs: -25.0
+  minimum_active_ms: 90
   silence_timeout_ms: 1000
   pre_buffer_ms: 1500
   post_buffer_ms: 750

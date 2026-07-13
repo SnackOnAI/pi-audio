@@ -1,8 +1,8 @@
 # Recording foundation
 
 `FfmpegAudioRecorder` creates explicitly bounded MP3 recordings from immutable
-PCM `AudioFrame` objects. It does not subscribe to ALSA or decide when speech
-starts and ends. A future VAD service will own those decisions and call the
+PCM `AudioFrame` objects. It does not subscribe to ALSA or decide when sound
+starts and ends. The sound detection service owns those decisions and calls the
 minimal `start`, `write_frame`, `finish`, and `abort` lifecycle.
 
 FFmpeg writes each recording to a unique `.part.mp3` path. The recorder exposes
