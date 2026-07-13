@@ -17,6 +17,7 @@ from typing import Any, Protocol
 import webrtcvad  # type: ignore[import-untyped]
 
 from .models import AudioConfig, RecordingConfig, TranscriptionConfig
+from .transcription_control import transcription_is_paused
 
 
 class TranscriptionError(RuntimeError):
@@ -25,11 +26,6 @@ class TranscriptionError(RuntimeError):
 
 class TranscriptionPaused(TranscriptionError):
     """Raised when the operator has paused paid transcription requests."""
-
-
-def transcription_pause_path(recording_directory: Path) -> Path:
-    """Return the durable runtime pause marker for transcription."""
-    return recording_directory / ".transcription-paused"
 
 
 @dataclass(frozen=True, slots=True)
@@ -548,7 +544,7 @@ class RecordingTranscriptionService:
 
     @property
     def is_paused(self) -> bool:
-        return transcription_pause_path(self._recording_config.directory).exists()
+        return transcription_is_paused(self._recording_config.directory)
 
     def _write_text(self, audio_path: Path, text: str) -> None:
         path = self._text_path(audio_path)

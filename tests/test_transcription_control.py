@@ -4,8 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.transcription_control import set_paused
-from src.transcription import transcription_pause_path
+from src.transcription_control import (
+    set_transcription_paused,
+    transcription_pause_path,
+)
 
 
 class TranscriptionControlTests(unittest.TestCase):
@@ -14,12 +16,12 @@ class TranscriptionControlTests(unittest.TestCase):
             recordings = Path(directory) / "recordings"
             marker = transcription_pause_path(recordings)
 
-            set_paused(recordings, True)
-            set_paused(recordings, True)
+            set_transcription_paused(recordings, True)
+            set_transcription_paused(recordings, True)
             self.assertTrue(marker.is_file())
 
-            set_paused(recordings, False)
-            set_paused(recordings, False)
+            set_transcription_paused(recordings, False)
+            set_transcription_paused(recordings, False)
             self.assertFalse(marker.exists())
 
 

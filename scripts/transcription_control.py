@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.transcription import transcription_pause_path
+from src.transcription_control import (
+    set_transcription_paused,
+    transcription_is_paused,
+)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -20,26 +23,15 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def set_paused(recording_directory: Path, paused: bool) -> None:
-    marker = transcription_pause_path(recording_directory)
-    if paused:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        temporary = marker.with_name(f"{marker.name}.part")
-        temporary.write_text("paused\n", encoding="utf-8")
-        temporary.replace(marker)
-    else:
-        marker.unlink(missing_ok=True)
-
-
 def main() -> int:
     args = parse_arguments()
     recording_directory = args.recordings.expanduser().resolve()
     if args.action == "pause":
-        set_paused(recording_directory, True)
+        set_transcription_paused(recording_directory, True)
     elif args.action == "start":
-        set_paused(recording_directory, False)
+        set_transcription_paused(recording_directory, False)
 
-    paused = transcription_pause_path(recording_directory).exists()
+    paused = transcription_is_paused(recording_directory)
     print(f"Transcription API usage: {'PAUSED' if paused else 'RUNNING'}")
     return 0
 
