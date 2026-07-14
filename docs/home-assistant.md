@@ -71,7 +71,7 @@ lovelace:
       title: Pi Audio
       icon: mdi:microphone
       show_in_sidebar: true
-      require_admin: false
+      require_admin: true
       filename: pi_audio_dashboard.yaml
 ```
 
