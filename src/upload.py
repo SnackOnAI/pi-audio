@@ -143,6 +143,11 @@ class RcloneUploadService:
     async def _process_bundle(self, bundle: RecordingBundle) -> None:
         if not bundle.audio_path.is_file():
             return
+        if (
+            self._upload_config.wait_for_transcription
+            and not bundle.transcript_record_path.is_file()
+        ):
+            return
         paths = self._available_paths(bundle)
         uploaded_files = self._read_uploaded_files(bundle)
         pending_paths = [path for path in paths if path.name not in uploaded_files]
@@ -263,7 +268,10 @@ class RcloneUploadService:
 
     @staticmethod
     def _date_subdirectory(path: Path) -> str:
-        match = re.match(r"sound-(\d{4})(\d{2})(\d{2})T", path.name)
+        match = re.match(
+            r"(?:sound|speech|pending)-(\d{4})(\d{2})(\d{2})T",
+            path.name,
+        )
         if match is not None:
             return "/".join(match.groups())
         modified_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)

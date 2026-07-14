@@ -45,6 +45,7 @@ class TranscriptionResponse:
 @dataclass(frozen=True, slots=True)
 class TranscriptRecord:
     status: str
+    classification: str
     audio_file: str
     model: str | None
     language: str
@@ -281,21 +282,16 @@ class RecordingTranscriptionService:
     async def _run(self) -> None:
         retry_delay = self._config.retry_initial_seconds
         while True:
-            if self.is_paused:
-                await asyncio.sleep(self._config.scan_interval_seconds)
-                continue
             recordings = self._discover_recordings()
             if not recordings:
                 await asyncio.sleep(self._config.scan_interval_seconds)
                 continue
             failed = False
-            paused = False
             for audio_path in recordings:
                 try:
                     await self._process_recording(audio_path)
                 except TranscriptionPaused:
-                    paused = True
-                    break
+                    continue
                 except TranscriptionError as exc:
                     failed = True
                     self._logger.warning(
@@ -318,12 +314,6 @@ class RecordingTranscriptionService:
             if not failed:
                 await asyncio.sleep(self._config.scan_interval_seconds)
 
-            if paused:
-                self._logger.info(
-                    "Transcription API usage is paused",
-                    extra={"event": "transcription_paused"},
-                )
-
     def _discover_recordings(self) -> list[Path]:
         now = time.time()
         paths: list[Path] = []
@@ -341,12 +331,16 @@ class RecordingTranscriptionService:
         return sorted(paths)
 
     async def _process_recording(self, audio_path: Path) -> None:
+        if self.is_paused and audio_path.name.startswith("speech-"):
+            raise TranscriptionPaused("transcription API usage is paused")
         screen = await self._screener.screen(audio_path)
         if not screen.speech:
+            audio_path = self._classify_bundle(audio_path, "sound")
             self._write_record(
                 audio_path,
                 TranscriptRecord(
                     status="no_speech",
+                    classification="sound",
                     audio_file=audio_path.name,
                     model=None,
                     language=self._config.language,
@@ -367,6 +361,7 @@ class RecordingTranscriptionService:
             )
             return
 
+        audio_path = self._classify_bundle(audio_path, "speech")
         if not self._within_monthly_limit(screen.duration_seconds):
             raise TranscriptionError("monthly transcription audio-minute limit reached")
 
@@ -398,6 +393,7 @@ class RecordingTranscriptionService:
             self._write_text(audio_path, text)
         record = TranscriptRecord(
             status="completed" if text else "no_transcript",
+            classification="speech",
             audio_file=audio_path.name,
             model=self._config.model,
             language=self._config.language,
@@ -425,6 +421,79 @@ class RecordingTranscriptionService:
                 "model": self._config.model,
             },
         )
+
+    def _classify_bundle(self, audio_path: Path, classification: str) -> Path:
+        if classification not in {"sound", "speech"}:
+            raise ValueError("classification must be 'sound' or 'speech'")
+        if not audio_path.name.startswith("pending-"):
+            if audio_path.name.startswith(f"{classification}-"):
+                pending_metadata_path = audio_path.with_name(
+                    "pending-" + audio_path.name.split("-", 1)[1]
+                ).with_suffix(".json")
+                classified_metadata_path = audio_path.with_suffix(".json")
+                if (
+                    pending_metadata_path.is_file()
+                    and not classified_metadata_path.exists()
+                ):
+                    try:
+                        self._rewrite_recording_metadata(
+                            pending_metadata_path,
+                            classified_metadata_path,
+                            audio_path,
+                        )
+                    except OSError as exc:
+                        raise TranscriptionError(
+                            f"unable to recover classified recording metadata: {exc}"
+                        ) from exc
+            return audio_path
+
+        suffix = audio_path.name.removeprefix("pending-")
+        classified_audio_path = audio_path.with_name(f"{classification}-{suffix}")
+        pending_metadata_path = audio_path.with_suffix(".json")
+        classified_metadata_path = classified_audio_path.with_suffix(".json")
+        try:
+            audio_path.replace(classified_audio_path)
+            if pending_metadata_path.is_file():
+                self._rewrite_recording_metadata(
+                    pending_metadata_path,
+                    classified_metadata_path,
+                    classified_audio_path,
+                )
+        except OSError as exc:
+            raise TranscriptionError(
+                f"unable to classify recording bundle {audio_path.name}: {exc}"
+            ) from exc
+        self._logger.info(
+            "Recording bundle classified",
+            extra={
+                "event": "recording_classified",
+                "classification": classification,
+                "path": str(classified_audio_path),
+            },
+        )
+        return classified_audio_path
+
+    @staticmethod
+    def _rewrite_recording_metadata(
+        source_path: Path,
+        target_path: Path,
+        audio_path: Path,
+    ) -> None:
+        try:
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            source_path.replace(target_path)
+            return
+        if isinstance(payload, dict):
+            payload["path"] = str(audio_path)
+            payload["classification"] = audio_path.name.split("-", 1)[0]
+        temporary_path = target_path.with_name(f"{target_path.name}.part")
+        temporary_path.write_text(
+            json.dumps(payload, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        temporary_path.replace(target_path)
+        source_path.unlink(missing_ok=True)
 
     async def _prepare_chunks(
         self,

@@ -107,7 +107,7 @@ class FfmpegAudioRecorder(AudioRecorder):
 
         started_at = datetime.now(timezone.utc)
         recording_id = uuid4().hex
-        filename = f"sound-{started_at:%Y%m%dT%H%M%S.%fZ}-{recording_id[:8]}.mp3"
+        filename = f"pending-{started_at:%Y%m%dT%H%M%S.%fZ}-{recording_id[:8]}.mp3"
         directory = self._recording_config.directory
         directory.mkdir(parents=True, exist_ok=True)
         final_path = directory / filename

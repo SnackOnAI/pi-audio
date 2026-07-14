@@ -105,6 +105,68 @@ class FfmpegSpeechScreenerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RecordingTranscriptionServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pending_non_speech_bundle_is_renamed_to_sound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path = root / "pending-20260714T010203.000000Z-a1b2c3d4.mp3"
+            metadata_path = audio_path.with_suffix(".json")
+            audio_path.write_bytes(b"mp3")
+            metadata_path.write_text(
+                json.dumps({"path": str(audio_path)}),
+                encoding="utf-8",
+            )
+            client = FakeClient(TranscriptionResponse("unused"))
+            service = RecordingTranscriptionService(
+                recording_config(root),
+                transcription_config(),
+                FakeScreener(SpeechScreenResult(False, 2.0, 120)),
+                client,
+            )
+
+            await service._process_recording(audio_path)
+
+            sound_path = root / audio_path.name.replace("pending-", "sound-", 1)
+            sound_metadata = sound_path.with_suffix(".json")
+            self.assertTrue(sound_path.is_file())
+            self.assertFalse(audio_path.exists())
+            self.assertTrue(sound_metadata.is_file())
+            metadata = json.loads(sound_metadata.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["path"], str(sound_path))
+            self.assertEqual(metadata["classification"], "sound")
+            self.assertTrue(sound_path.with_suffix(".transcript.json").is_file())
+            self.assertEqual(client.paths, [])
+
+    async def test_pending_speech_bundle_is_renamed_before_cloud_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_path = root / "pending-20260714T010203.000000Z-a1b2c3d4.mp3"
+            metadata_path = audio_path.with_suffix(".json")
+            audio_path.write_bytes(b"mp3")
+            metadata_path.write_text(
+                json.dumps({"path": str(audio_path)}),
+                encoding="utf-8",
+            )
+            client = FakeClient(TranscriptionResponse("Hello."))
+            service = RecordingTranscriptionService(
+                recording_config(root),
+                transcription_config(),
+                FakeScreener(SpeechScreenResult(True, 2.0, 600)),
+                client,
+            )
+
+            await service._process_recording(audio_path)
+
+            speech_path = root / audio_path.name.replace("pending-", "speech-", 1)
+            self.assertTrue(speech_path.is_file())
+            self.assertFalse(audio_path.exists())
+            self.assertEqual(client.paths, [speech_path])
+            self.assertTrue(speech_path.with_suffix(".txt").is_file())
+            record = json.loads(
+                speech_path.with_suffix(".transcript.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(record["classification"], "speech")
+            self.assertEqual(record["audio_file"], speech_path.name)
+
     async def test_no_speech_writes_durable_skip_record_without_cloud_call(
         self,
     ) -> None:
@@ -127,6 +189,7 @@ class RecordingTranscriptionServiceTests(unittest.IsolatedAsyncioTestCase):
             record_path = audio_path.with_suffix(".transcript.json")
             record = json.loads(record_path.read_text(encoding="utf-8"))
             self.assertEqual(record["status"], "no_speech")
+            self.assertEqual(record["classification"], "sound")
             self.assertEqual(record["maximum_continuous_speech_ms"], 120)
             self.assertFalse(audio_path.with_suffix(".txt").exists())
 
@@ -160,6 +223,7 @@ class RecordingTranscriptionServiceTests(unittest.IsolatedAsyncioTestCase):
                 audio_path.with_suffix(".transcript.json").read_text(encoding="utf-8")
             )
             self.assertEqual(record["status"], "completed")
+            self.assertEqual(record["classification"], "speech")
             self.assertEqual(record["model"], "gpt-4o-transcribe")
             self.assertEqual(record["request_ids"], ["req_test"])
             ledgers = list(root.glob(".transcription-usage-*.json"))
@@ -193,6 +257,7 @@ class RecordingTranscriptionServiceTests(unittest.IsolatedAsyncioTestCase):
                 audio_path.with_suffix(".transcript.json").read_text(encoding="utf-8")
             )
             self.assertEqual(record["status"], "no_transcript")
+            self.assertEqual(record["classification"], "speech")
             self.assertIsNone(record["text_file"])
             self.assertEqual(record["request_ids"], ["req_empty"])
             self.assertFalse(audio_path.with_suffix(".txt").exists())

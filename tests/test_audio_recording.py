@@ -108,6 +108,7 @@ class FfmpegAudioRecorderTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertIsNotNone(result)
             assert result is not None
+            self.assertTrue(result.path.name.startswith("pending-"))
             self.assertEqual(result.path.read_bytes(), b"encoded-mp3")
             self.assertEqual(result.duration_seconds, 0.03)
             self.assertEqual(result.pcm_frame_count, 480)

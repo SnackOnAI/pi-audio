@@ -66,7 +66,7 @@ class RcloneUploadServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_uploads_recording_bundle_to_utc_date_subdirectory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            audio_path = root / "sound-20260713T194557.647588Z-3c87e87c.mp3"
+            audio_path = root / "speech-20260713T194557.647588Z-3c87e87c.mp3"
             metadata_path = audio_path.with_suffix(".json")
             audio_path.write_bytes(b"mp3")
             metadata_path.write_text("{}", encoding="utf-8")
@@ -218,6 +218,7 @@ class RcloneUploadServiceTests(unittest.IsolatedAsyncioTestCase):
             with patch("asyncio.create_subprocess_exec", create_process):
                 await service._process_bundle(bundle)
                 self.assertTrue(audio_path.exists())
+                create_process.assert_not_awaited()
 
                 bundle.transcript_path.write_text("hello\n", encoding="utf-8")
                 bundle.transcript_record_path.write_text("{}", encoding="utf-8")

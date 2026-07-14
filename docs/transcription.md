@@ -8,15 +8,21 @@ does not access ALSA and it does not put PCM on the EventBus.
 1. The sound recorder atomically finishes an MP3.
 2. FFmpeg decodes the MP3 to 16 kHz mono PCM.
 3. WebRTC VAD checks for at least 300 ms of continuous speech locally.
-4. Files without speech receive a durable `.transcript.json` record and are not sent
+4. New `pending-*` bundles are atomically classified as `sound-*` or `speech-*`.
+5. Files without speech receive a durable `.transcript.json` record and are not sent
    to an external API.
-5. Speech-positive files are sent to `gpt-4o-transcribe` with English and microphone
+6. Speech-positive files are sent to `gpt-4o-transcribe` with English and microphone
    context supplied to improve recognition.
-6. A human-readable `.txt` file and machine-readable `.transcript.json` record are
+7. A human-readable `.txt` file and machine-readable `.transcript.json` record are
    written atomically.
-7. The uploader detects the new sidecars and adds them to the existing Dropbox
-   bundle. Local audio is not deleted until transcription has completed or the file
-   has been classified as no speech.
+8. The uploader waits for classification, then uploads the complete consistently
+   named bundle to Dropbox. It also detects later sidecars and adds them to the
+   existing Dropbox bundle. Local audio is not deleted until transcription has
+   completed or the file has been classified as no speech.
+
+New bundle names use `speech-<timestamp>-<id>` when WebRTC VAD detects sustained
+speech and `sound-<timestamp>-<id>` otherwise. Existing pre-classification bundles
+retain their original names.
 
 Recordings longer than 10 minutes or larger than 24 MiB are split into 10-minute MP3
 chunks before upload to the transcription API. This keeps responses below the
