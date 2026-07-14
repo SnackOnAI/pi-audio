@@ -57,6 +57,24 @@ configuration, then restart Home Assistant. It creates:
 - `number.pi_audio_microphone_gain`
 - stream, upload, transcription-minute, and last-classification sensors
 
+An optional ready-to-use sidebar dashboard is provided at
+[`homeassistant/pi_audio_dashboard.yaml`](../homeassistant/pi_audio_dashboard.yaml).
+Register it under `lovelace.dashboards` and copy it to
+`/config/pi_audio_dashboard.yaml`. The gain number renders as a slider in its
+entities card.
+
+```yaml
+lovelace:
+  dashboards:
+    pi-audio:
+      mode: yaml
+      title: Pi Audio
+      icon: mdi:microphone
+      show_in_sidebar: true
+      require_admin: false
+      filename: pi_audio_dashboard.yaml
+```
+
 The status sensor polls every 10 seconds. A control updates it immediately
 after the API call.
 

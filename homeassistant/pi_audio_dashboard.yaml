@@ -1,0 +1,44 @@
+title: Pi Audio
+views:
+  - title: Pi Audio
+    path: overview
+    icon: mdi:microphone
+    cards:
+      - type: entities
+        title: Audio controls
+        show_header_toggle: false
+        entities:
+          - entity: number.pi_audio_microphone_gain
+            name: Samson Go Mic gain
+          - entity: switch.pi_audio_recording
+            name: Create recording files
+          - entity: switch.pi_audio_transcription
+            name: Use transcription API
+      - type: entities
+        title: Audio status
+        show_header_toggle: false
+        entities:
+          - entity: sensor.pi_audio_stack
+          - entity: sensor.pi_audio_stream
+          - entity: sensor.pi_audio_upload
+          - entity: sensor.pi_audio_last_classification
+          - entity: sensor.pi_audio_transcription_minutes
+      - type: horizontal-stack
+        cards:
+          - type: button
+            name: Live stream (Tailscale)
+            icon: mdi:radio-tower
+            tap_action:
+              action: url
+              url_path: http://100.100.152.118:8000/live.mp3
+          - type: button
+            name: Live stream (home Wi-Fi)
+            icon: mdi:lan
+            tap_action:
+              action: url
+              url_path: http://192.168.1.35:8000/live.mp3
+      - type: markdown
+        content: >-
+          **Privacy:** turning off recording stops new local files but does not
+          stop the live Icecast stream. Turning off transcription stops paid API
+          use but does not stop recording.
