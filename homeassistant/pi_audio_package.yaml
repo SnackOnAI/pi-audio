@@ -98,7 +98,6 @@ template:
         unique_id: pi_audio_microphone_gain
         icon: mdi:microphone-settings
         unit_of_measurement: "%"
-        mode: slider
         min: 0
         max: 100
         step: 1
