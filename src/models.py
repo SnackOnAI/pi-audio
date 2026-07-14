@@ -72,6 +72,14 @@ class AudioConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class GainConfig:
+    enabled: bool
+    mixer_device: str
+    mixer_control: str
+    operation_timeout_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
 class StreamConfig:
     enabled: bool
     encoder: str
@@ -165,9 +173,18 @@ class HealthConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ControlApiConfig:
+    enabled: bool
+    host: str
+    port: int
+    token_environment: str
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     application: ApplicationConfig
     audio: AudioConfig
+    gain: GainConfig
     stream: StreamConfig
     vad: VadConfig
     activity: ActivityConfig
@@ -176,6 +193,7 @@ class AppConfig:
     transcription: TranscriptionConfig
     logging: LoggingConfig
     health: HealthConfig
+    control_api: ControlApiConfig
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
@@ -183,6 +201,7 @@ class AppConfig:
 
         application = _section(data, "application")
         audio = _section(data, "audio")
+        gain = _section(data, "gain")
         stream = _section(data, "stream")
         vad = _section(data, "vad")
         activity = _section(data, "activity")
@@ -191,6 +210,7 @@ class AppConfig:
         transcription = _section(data, "transcription")
         logging_config = _section(data, "logging")
         health = _section(data, "health")
+        control_api = _section(data, "control_api")
 
         config = cls(
             application=ApplicationConfig(
@@ -204,6 +224,14 @@ class AppConfig:
                 sample_width_bytes=_require(audio, "sample_width_bytes", int),
                 chunk_duration_ms=_require(audio, "chunk_duration_ms", int),
                 queue_size=_require(audio, "queue_size", int),
+            ),
+            gain=GainConfig(
+                enabled=_require(gain, "enabled", bool),
+                mixer_device=_require(gain, "mixer_device", str),
+                mixer_control=_require(gain, "mixer_control", str),
+                operation_timeout_seconds=_require(
+                    gain, "operation_timeout_seconds", int
+                ),
             ),
             stream=StreamConfig(
                 enabled=_require(stream, "enabled", bool),
@@ -290,6 +318,12 @@ class AppConfig:
                 interval_seconds=_require(health, "interval_seconds", int),
                 file=Path(_require(health, "file", str)),
             ),
+            control_api=ControlApiConfig(
+                enabled=_require(control_api, "enabled", bool),
+                host=_require(control_api, "host", str),
+                port=_require(control_api, "port", int),
+                token_environment=_require(control_api, "token_environment", str),
+            ),
         )
 
         config.validate()
@@ -317,6 +351,15 @@ class AppConfig:
 
         if self.audio.queue_size <= 0:
             raise ConfigurationError("audio.queue_size must be positive.")
+
+        if not self.gain.mixer_device.strip():
+            raise ConfigurationError("gain.mixer_device must not be empty.")
+
+        if not self.gain.mixer_control.strip():
+            raise ConfigurationError("gain.mixer_control must not be empty.")
+
+        if self.gain.operation_timeout_seconds <= 0:
+            raise ConfigurationError("gain.operation_timeout_seconds must be positive.")
 
         if self.vad.engine.lower() != "webrtc":
             raise ConfigurationError("vad.engine must be 'webrtc'.")
@@ -488,6 +531,15 @@ class AppConfig:
 
         if self.logging.backup_count < 1:
             raise ConfigurationError("logging.backup_count must be at least 1.")
+
+        if not self.control_api.host.strip():
+            raise ConfigurationError("control_api.host must not be empty.")
+
+        if not 1 <= self.control_api.port <= 65_535:
+            raise ConfigurationError("control_api.port must be between 1 and 65535.")
+
+        if not self.control_api.token_environment.strip():
+            raise ConfigurationError("control_api.token_environment must not be empty.")
 
         valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         if self.logging.level not in valid_levels:

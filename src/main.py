@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .audio import (
     AlsaAudioSource,
+    AlsaAudioGainControl,
     AudioCaptureService,
     AudioFrameBroker,
     FfmpegAudioRecorder,
@@ -20,6 +21,7 @@ from .audio import (
     WebRtcVoiceActivityDetector,
 )
 from .config import load_config
+from .control_api import ControlApiService
 from .log_setup import configure_logging
 from .models import AppConfig, ConfigurationError
 from .transcription import (
@@ -101,7 +103,21 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         sample_width_bytes=config.audio.sample_width_bytes,
         frames_per_chunk=config.audio.frames_per_chunk,
     )
-    capture_service = AudioCaptureService(source, broker, logger)
+    gain_control = (
+        AlsaAudioGainControl(
+            device=config.gain.mixer_device,
+            control=config.gain.mixer_control,
+            operation_timeout_seconds=config.gain.operation_timeout_seconds,
+        )
+        if config.gain.enabled
+        else None
+    )
+    capture_service = AudioCaptureService(
+        source,
+        broker,
+        logger,
+        gain_control=gain_control,
+    )
     streaming_service = (
         FfmpegStreamingService(broker, config.audio, config.stream, logger=logger)
         if config.stream.enabled
@@ -146,6 +162,33 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if config.transcription.enabled
         else None
     )
+
+    def runtime_status() -> dict[str, str]:
+        return {
+            "capture": "running" if capture_service.is_running else "stopped",
+            "stream": _service_state(streaming_service),
+            "recording": _service_state(detection_service),
+            "upload": _service_state(upload_service),
+            "transcription": _service_state(transcription_service),
+        }
+
+    control_api_service = (
+        ControlApiService(
+            config.control_api,
+            config.recording,
+            config.transcription,
+            runtime_status,
+            gain_getter=(
+                capture_service.get_input_gain if config.gain.enabled else None
+            ),
+            gain_setter=(
+                capture_service.set_input_gain if config.gain.enabled else None
+            ),
+            logger=logger,
+        )
+        if config.control_api.enabled
+        else None
+    )
     shutdown_requested = asyncio.Event()
     loop = asyncio.get_running_loop()
     installed_signals: list[signal.Signals] = []
@@ -167,6 +210,8 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             "upload_enabled": config.upload.enabled,
             "transcription_enabled": config.transcription.enabled,
             "transcription_model": config.transcription.model,
+            "control_api_enabled": config.control_api.enabled,
+            "gain_control_enabled": config.gain.enabled,
         },
     )
 
@@ -176,6 +221,7 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
     detection_waiter: asyncio.Task[None] | None = None
     upload_waiter: asyncio.Task[None] | None = None
     transcription_waiter: asyncio.Task[None] | None = None
+    control_api_waiter: asyncio.Task[None] | None = None
     try:
         if transcription_service is not None:
             await transcription_service.start()
@@ -186,6 +232,8 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if streaming_service is not None:
             await streaming_service.start()
         await capture_service.start()
+        if control_api_service is not None:
+            await control_api_service.start()
 
         shutdown_waiter = asyncio.create_task(
             shutdown_requested.wait(), name="shutdown-signal"
@@ -209,6 +257,10 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             transcription_waiter = asyncio.create_task(
                 transcription_service.wait(), name="transcription-supervisor"
             )
+        if control_api_service is not None:
+            control_api_waiter = asyncio.create_task(
+                control_api_service.wait(), name="control-api-supervisor"
+            )
         supervised_tasks = {shutdown_waiter, capture_waiter}
         if streaming_waiter is not None:
             supervised_tasks.add(streaming_waiter)
@@ -218,6 +270,8 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             supervised_tasks.add(upload_waiter)
         if transcription_waiter is not None:
             supervised_tasks.add(transcription_waiter)
+        if control_api_waiter is not None:
+            supervised_tasks.add(control_api_waiter)
         done, _ = await asyncio.wait(
             supervised_tasks,
             return_when=asyncio.FIRST_COMPLETED,
@@ -237,6 +291,9 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
         if transcription_waiter is not None and transcription_waiter in done:
             await transcription_waiter
             raise RuntimeError("recording transcription stopped unexpectedly")
+        if control_api_waiter is not None and control_api_waiter in done:
+            await control_api_waiter
+            raise RuntimeError("control API stopped unexpectedly")
     finally:
         waiters = (
             shutdown_waiter,
@@ -245,6 +302,7 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             detection_waiter,
             upload_waiter,
             transcription_waiter,
+            control_api_waiter,
         )
         for waiter in waiters:
             if waiter is not None and not waiter.done():
@@ -254,30 +312,40 @@ async def run_application(config: AppConfig, logger: logging.Logger) -> None:
             return_exceptions=True,
         )
         try:
-            await capture_service.stop()
+            if control_api_service is not None:
+                await control_api_service.stop()
         finally:
             try:
-                if detection_service is not None:
-                    await detection_service.stop()
+                await capture_service.stop()
             finally:
                 try:
-                    if transcription_service is not None:
-                        await transcription_service.stop()
+                    if detection_service is not None:
+                        await detection_service.stop()
                 finally:
                     try:
-                        if upload_service is not None:
-                            await upload_service.stop()
+                        if transcription_service is not None:
+                            await transcription_service.stop()
                     finally:
                         try:
-                            if streaming_service is not None:
-                                await streaming_service.stop()
+                            if upload_service is not None:
+                                await upload_service.stop()
                         finally:
-                            for handled_signal in installed_signals:
-                                loop.remove_signal_handler(handled_signal)
-                            logger.info(
-                                "Application stopped",
-                                extra={"event": "application_stopped"},
-                            )
+                            try:
+                                if streaming_service is not None:
+                                    await streaming_service.stop()
+                            finally:
+                                for handled_signal in installed_signals:
+                                    loop.remove_signal_handler(handled_signal)
+                                logger.info(
+                                    "Application stopped",
+                                    extra={"event": "application_stopped"},
+                                )
+
+
+def _service_state(service: object | None) -> str:
+    if service is None:
+        return "disabled"
+    return "running" if bool(getattr(service, "is_running", False)) else "stopped"
 
 
 if __name__ == "__main__":

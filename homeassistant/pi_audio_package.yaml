@@ -1,0 +1,142 @@
+# Copy to /config/packages/pi_audio.yaml when Home Assistant packages are enabled.
+
+rest:
+  - resource: http://127.0.0.1:8765/api/v1/status
+    headers:
+      Authorization: !secret pi_audio_authorization
+    scan_interval: 10
+    timeout: 5
+    sensor:
+      - name: "Pi Audio Stack"
+        unique_id: pi_audio_stack
+        value_template: "{{ value_json.service }}"
+        json_attributes:
+          - capture
+          - stream
+          - recording
+          - transcription
+          - upload
+          - gain
+          - last_recording
+          - transcription_minutes_this_month
+          - transcription_monthly_limit_minutes
+          - timestamp
+
+rest_command:
+  pi_audio_recording_start:
+    url: http://127.0.0.1:8765/api/v1/recording/start
+    method: POST
+    headers:
+      Authorization: !secret pi_audio_authorization
+  pi_audio_recording_stop:
+    url: http://127.0.0.1:8765/api/v1/recording/stop
+    method: POST
+    headers:
+      Authorization: !secret pi_audio_authorization
+  pi_audio_transcription_start:
+    url: http://127.0.0.1:8765/api/v1/transcription/start
+    method: POST
+    headers:
+      Authorization: !secret pi_audio_authorization
+  pi_audio_transcription_stop:
+    url: http://127.0.0.1:8765/api/v1/transcription/stop
+    method: POST
+    headers:
+      Authorization: !secret pi_audio_authorization
+  pi_audio_set_gain:
+    url: http://127.0.0.1:8765/api/v1/gain
+    method: POST
+    headers:
+      Authorization: !secret pi_audio_authorization
+    content_type: application/json
+    payload: '{"percent": {{ percent | int }}}'
+
+template:
+  - switch:
+      - name: "Pi Audio Recording"
+        unique_id: pi_audio_recording
+        icon: mdi:record-rec
+        availability: "{{ has_value('sensor.pi_audio_stack') }}"
+        state: >-
+          {{ state_attr('sensor.pi_audio_stack', 'recording') == 'running' }}
+        turn_on:
+          - action: rest_command.pi_audio_recording_start
+          - delay:
+              milliseconds: 250
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.pi_audio_stack
+        turn_off:
+          - action: rest_command.pi_audio_recording_stop
+          - delay:
+              milliseconds: 250
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.pi_audio_stack
+      - name: "Pi Audio Transcription"
+        unique_id: pi_audio_transcription
+        icon: mdi:text-box-outline
+        availability: "{{ has_value('sensor.pi_audio_stack') }}"
+        state: >-
+          {{ state_attr('sensor.pi_audio_stack', 'transcription') == 'running' }}
+        turn_on:
+          - action: rest_command.pi_audio_transcription_start
+          - delay:
+              milliseconds: 250
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.pi_audio_stack
+        turn_off:
+          - action: rest_command.pi_audio_transcription_stop
+          - delay:
+              milliseconds: 250
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.pi_audio_stack
+  - number:
+      - name: "Pi Audio Microphone Gain"
+        unique_id: pi_audio_microphone_gain
+        icon: mdi:microphone-settings
+        unit_of_measurement: "%"
+        mode: slider
+        min: 0
+        max: 100
+        step: 1
+        availability: >-
+          {% set gain = state_attr('sensor.pi_audio_stack', 'gain') %}
+          {{ gain is mapping and gain.get('available', false) }}
+        state: >-
+          {% set gain = state_attr('sensor.pi_audio_stack', 'gain') %}
+          {{ gain.get('percent', 0) if gain is mapping else 0 }}
+        set_value:
+          - action: rest_command.pi_audio_set_gain
+            data:
+              percent: "{{ value | int }}"
+          - delay:
+              milliseconds: 250
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.pi_audio_stack
+  - sensor:
+      - name: "Pi Audio Stream"
+        unique_id: pi_audio_stream
+        icon: mdi:radio-tower
+        state: "{{ state_attr('sensor.pi_audio_stack', 'stream') or 'unknown' }}"
+      - name: "Pi Audio Upload"
+        unique_id: pi_audio_upload
+        icon: mdi:cloud-upload-outline
+        state: "{{ state_attr('sensor.pi_audio_stack', 'upload') or 'unknown' }}"
+      - name: "Pi Audio Transcription Minutes"
+        unique_id: pi_audio_transcription_minutes
+        icon: mdi:timer-outline
+        unit_of_measurement: "min"
+        state: >-
+          {{ state_attr('sensor.pi_audio_stack',
+                        'transcription_minutes_this_month') | float(0) }}
+      - name: "Pi Audio Last Classification"
+        unique_id: pi_audio_last_classification
+        icon: mdi:waveform
+        state: >-
+          {% set recording = state_attr('sensor.pi_audio_stack', 'last_recording') %}
+          {{ recording.get('classification', 'none')
+             if recording is mapping else 'none' }}

@@ -10,6 +10,12 @@ audio:
   chunk_duration_ms: 30
   queue_size: 250
 
+gain:
+  enabled: true
+  mixer_device: "hw:CARD=Mic"
+  mixer_control: "Mic"
+  operation_timeout_seconds: 5
+
 stream:
   enabled: true
   encoder: "ffmpeg"
@@ -82,3 +88,9 @@ health:
   enabled: true
   interval_seconds: 30
   file: "./logs/health.json"
+
+control_api:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8765
+  token_environment: "HOME_ASSISTANT_TOKEN"

@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
+from src.audio import AudioGain
 from src.audio.source import AudioSourceError
 from src.config import load_config
 from src.main import run_application
@@ -22,6 +23,10 @@ class FakeService:
         self.stopped = False
         self._finished = asyncio.Event()
 
+    @property
+    def is_running(self) -> bool:
+        return self.started and not self.stopped
+
     async def start(self) -> None:
         self.started = True
 
@@ -34,6 +39,12 @@ class FakeService:
         self.stopped = True
         self._finished.set()
 
+    async def get_input_gain(self) -> AudioGain:
+        return AudioGain(100, 22.0)
+
+    async def set_input_gain(self, percent: int) -> AudioGain:
+        return AudioGain(percent, None)
+
 
 class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_signal_stops_capture_and_streaming(self) -> None:
@@ -42,6 +53,7 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         detection = FakeService()
         upload = FakeService()
         transcription = FakeService()
+        control_api = FakeService()
         callbacks: dict[signal.Signals, Callable[[], None]] = {}
         loop = asyncio.get_running_loop()
 
@@ -51,7 +63,14 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
             callbacks[handled_signal] = callback
 
         with (
-            self._runtime_patches(capture, streaming, detection, upload, transcription),
+            self._runtime_patches(
+                capture,
+                streaming,
+                detection,
+                upload,
+                transcription,
+                control_api,
+            ),
             patch.object(loop, "add_signal_handler", side_effect=add_signal_handler),
             patch.object(loop, "remove_signal_handler", return_value=True),
         ):
@@ -73,6 +92,8 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(upload.stopped)
         self.assertTrue(transcription.started)
         self.assertTrue(transcription.stopped)
+        self.assertTrue(control_api.started)
+        self.assertTrue(control_api.stopped)
 
     async def test_capture_failure_still_stops_streaming(self) -> None:
         capture = FakeService(AudioSourceError("capture failed"))
@@ -80,10 +101,18 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         detection = FakeService()
         upload = FakeService()
         transcription = FakeService()
+        control_api = FakeService()
         loop = asyncio.get_running_loop()
 
         with (
-            self._runtime_patches(capture, streaming, detection, upload, transcription),
+            self._runtime_patches(
+                capture,
+                streaming,
+                detection,
+                upload,
+                transcription,
+                control_api,
+            ),
             patch.object(loop, "add_signal_handler"),
             patch.object(loop, "remove_signal_handler", return_value=True),
         ):
@@ -95,6 +124,7 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(detection.stopped)
         self.assertTrue(upload.stopped)
         self.assertTrue(transcription.stopped)
+        self.assertTrue(control_api.stopped)
 
     async def test_upload_failure_stops_all_services(self) -> None:
         capture = FakeService()
@@ -102,10 +132,18 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         detection = FakeService()
         upload = FakeService(RuntimeError("upload failed"))
         transcription = FakeService()
+        control_api = FakeService()
         loop = asyncio.get_running_loop()
 
         with (
-            self._runtime_patches(capture, streaming, detection, upload, transcription),
+            self._runtime_patches(
+                capture,
+                streaming,
+                detection,
+                upload,
+                transcription,
+                control_api,
+            ),
             patch.object(loop, "add_signal_handler"),
             patch.object(loop, "remove_signal_handler", return_value=True),
         ):
@@ -117,6 +155,7 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(detection.stopped)
         self.assertTrue(upload.stopped)
         self.assertTrue(transcription.stopped)
+        self.assertTrue(control_api.stopped)
 
     def _runtime_patches(
         self,
@@ -125,8 +164,16 @@ class ApplicationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         detection: FakeService,
         upload: FakeService,
         transcription: FakeService,
+        control_api: FakeService,
     ) -> "_RuntimePatches":
-        return _RuntimePatches(capture, streaming, detection, upload, transcription)
+        return _RuntimePatches(
+            capture,
+            streaming,
+            detection,
+            upload,
+            transcription,
+            control_api,
+        )
 
     def _config(self) -> AppConfig:
         with patch.dict(os.environ, {"ICECAST_SOURCE_PASSWORD": "test"}):
@@ -154,9 +201,11 @@ class _RuntimePatches:
         detection: FakeService,
         upload: FakeService,
         transcription: FakeService,
+        control_api: FakeService,
     ) -> None:
         self._patches = (
             patch("src.main.AlsaAudioSource"),
+            patch("src.main.AlsaAudioGainControl"),
             patch("src.main.AudioCaptureService", return_value=capture),
             patch("src.main.FfmpegStreamingService", return_value=streaming),
             patch("src.main.FfmpegAudioRecorder"),
@@ -170,6 +219,7 @@ class _RuntimePatches:
                 "src.main.RecordingTranscriptionService",
                 return_value=transcription,
             ),
+            patch("src.main.ControlApiService", return_value=control_api),
         )
 
     def __enter__(self) -> "_RuntimePatches":

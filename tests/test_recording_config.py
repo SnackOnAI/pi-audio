@@ -66,6 +66,20 @@ class RecordingConfigurationTests(unittest.TestCase):
                 with self.assertRaises(ConfigurationError):
                     AppConfig.from_dict(data)
 
+    def test_rejects_invalid_gain_configuration(self) -> None:
+        invalid_values = (
+            ("mixer_device", ""),
+            ("mixer_control", ""),
+            ("operation_timeout_seconds", 0),
+        )
+
+        for key, value in invalid_values:
+            data = deepcopy(self.config_data)
+            data["gain"][key] = value
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(ConfigurationError):
+                    AppConfig.from_dict(data)
+
     def test_vad_requires_supported_pcm_dimensions_when_enabled(self) -> None:
         data = deepcopy(self.config_data)
         data["audio"]["sample_rate"] = 44_100
@@ -113,6 +127,21 @@ class RecordingConfigurationTests(unittest.TestCase):
         for key, value in invalid_values:
             data = deepcopy(self.config_data)
             data["transcription"][key] = value
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(ConfigurationError):
+                    AppConfig.from_dict(data)
+
+    def test_rejects_invalid_control_api_configuration(self) -> None:
+        invalid_values = (
+            ("host", ""),
+            ("port", 0),
+            ("port", 65_536),
+            ("token_environment", ""),
+        )
+
+        for key, value in invalid_values:
+            data = deepcopy(self.config_data)
+            data["control_api"][key] = value
             with self.subTest(key=key, value=value):
                 with self.assertRaises(ConfigurationError):
                     AppConfig.from_dict(data)

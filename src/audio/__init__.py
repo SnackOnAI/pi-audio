@@ -6,6 +6,12 @@ from .broker import (
     AudioFrameSubscription,
 )
 from .capture import AudioCaptureService
+from .gain import (
+    AlsaAudioGainControl,
+    AudioGain,
+    AudioGainControl,
+    AudioGainError,
+)
 from .detection import (
     ActivityDecision,
     AudioActivityDetector,
@@ -29,6 +35,7 @@ from .stream import AudioStreamingError, FfmpegStreamingService
 
 __all__ = [
     "AlsaAudioSource",
+    "AlsaAudioGainControl",
     "ActivityDecision",
     "AudioActivityDetector",
     "AudioCaptureService",
@@ -37,6 +44,9 @@ __all__ = [
     "AudioFrameBroker",
     "AudioFrameBrokerFull",
     "AudioFrameSubscription",
+    "AudioGain",
+    "AudioGainControl",
+    "AudioGainError",
     "AudioRecorder",
     "AudioRecordingError",
     "AudioSource",

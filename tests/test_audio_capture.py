@@ -5,6 +5,7 @@ import unittest
 
 from src.audio.broker import AudioFrameBroker
 from src.audio.capture import AudioCaptureService
+from src.audio.gain import AudioGain, AudioGainControl
 from src.audio.models import AudioFrame
 from src.audio.source import AudioSource, AudioSourceError
 
@@ -28,6 +29,18 @@ class FakeAudioSource(AudioSource):
     async def close(self) -> None:
         self.closed = True
         self._closed.set()
+
+
+class FakeGainControl(AudioGainControl):
+    def __init__(self) -> None:
+        self.gain = AudioGain(percent=75, decibels=10.0)
+
+    async def get(self) -> AudioGain:
+        return self.gain
+
+    async def set(self, percent: int) -> AudioGain:
+        self.gain = AudioGain(percent=percent, decibels=1.0)
+        return self.gain
 
 
 class AudioCaptureServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -72,6 +85,17 @@ class AudioCaptureServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(service.is_running)
         await service.stop()
+
+    async def test_gain_is_only_exposed_through_capture_service(self) -> None:
+        gain_control = FakeGainControl()
+        service = AudioCaptureService(
+            FakeAudioSource([]),
+            AudioFrameBroker(queue_size=1),
+            gain_control=gain_control,
+        )
+
+        self.assertEqual((await service.get_input_gain()).percent, 75)
+        self.assertEqual((await service.set_input_gain(40)).percent, 40)
 
 
 if __name__ == "__main__":
